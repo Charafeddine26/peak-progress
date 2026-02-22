@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Peak Progress — Companion</title>
+  <meta name="description" content="Peak Progress companion app — track your mountain climbing fitness journey via Bluetooth.">
+  <meta name="theme-color" content="#0a0e1a">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Outfit:wght@300;400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ═══════════════════════════════════════════════ -->
+  <!--  SPLASH / CONNECTION SCREEN                    -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <section id="screen-connect" class="screen active">
+    <div class="connect-bg">
+      <div class="mountain-silhouette"></div>
+      <div class="stars"></div>
+    </div>
+    <div class="connect-content">
+      <div class="logo-container">
+        <div class="logo-icon">
+          <svg viewBox="0 0 64 64" fill="none">
+            <path d="M32 4L56 52H8L32 4Z" fill="#2E5A44"/>
+            <path d="M32 18L46 52H18L32 18Z" fill="#1D3D2D"/>
+            <circle cx="32" cy="14" r="3" fill="#FF8F00"/>
+          </svg>
+        </div>
+        <h1 class="app-title">Peak Progress</h1>
+        <p class="app-subtitle">Your Mountain Climbing Journey</p>
+      </div>
+
+      <div class="connection-status" id="connectionStatus">
+        <div class="status-dot disconnected" id="statusDot"></div>
+        <span id="statusText">Not Connected</span>
+      </div>
+
+      <button class="btn-primary btn-glow" id="btnConnect" onclick="connectBLE()">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6.5 6.5l11 11M12 2v20M17.5 6.5l-11 11"/>
+        </svg>
+        Scan & Connect
+      </button>
+
+      <button class="btn-secondary" id="btnDemo" onclick="startDemoMode()">
+        Try Demo Mode
+      </button>
+
+      <p class="connect-hint">Make sure your Peak Progress device is powered on and nearby.</p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!--  HOME DASHBOARD                                -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <section id="screen-home" class="screen">
+    <header class="app-header">
+      <div class="header-left">
+        <div class="status-badge" id="headerStatus">
+          <div class="status-dot-sm connected"></div>
+          <span>Connected</span>
+        </div>
+      </div>
+      <h2 class="header-title">Peak Progress</h2>
+      <button class="header-btn" onclick="showScreen('screen-settings')" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="dashboard-scroll">
+      <!-- Current Mountain -->
+      <div class="mountain-hero-section">
+        <div class="mountain-hero-bg" id="mountainHeroBg"></div>
+        <div class="mountain-hero-content">
+          <span class="mountain-tier-badge" id="tierBadge">TIER 1</span>
+          <h2 class="mountain-name" id="mountainName">Colline Locale</h2>
+          <p class="mountain-subtitle" id="mountainSubtitle">Training Peak • 1 Week</p>
+        </div>
+      </div>
+
+      <!-- Climber Progress -->
+      <div class="progress-section">
+        <div class="progress-visual">
+          <div class="mountain-track">
+            <div class="track-bg"></div>
+            <div class="track-fill" id="trackFill"></div>
+            <div class="climber-dot" id="climberDot">
+              <span>+</span>
+            </div>
+            <!-- LED dots along the track -->
+            <div class="led-dots" id="ledDots"></div>
+          </div>
+          <div class="progress-labels">
+            <span class="label-base">Base Camp</span>
+            <span class="label-summit">Summit</span>
+          </div>
+        </div>
+        <div class="progress-text">
+          <span class="progress-fraction" id="progressFraction">0 / 7</span>
+          <span class="progress-percent" id="progressPercent">0%</span>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <p class="week-label" id="weekLabel">Week 1 of 1</p>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="statStreak">0</div>
+          <div class="stat-label">Day Streak</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statSummits">0</div>
+          <div class="stat-label">Summits</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statLongest">0</div>
+          <div class="stat-label">Best Streak</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statTotal">0</div>
+          <div class="stat-label">Total Sessions</div>
+        </div>
+      </div>
+
+      <!-- Log Activity Button moved to fixed-action-bar -->
+    </div>
+
+    <!-- Fixed Action Bar -->
+    <div class="fixed-action-bar">
+      <button class="btn-primary btn-log" id="btnLog" onclick="sendLogActivity()">
+        <span class="btn-log-icon">+</span>
+        Log Activity
+      </button>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="showScreen('screen-home')" data-screen="screen-home">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-mountains')" data-screen="screen-mountains">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>
+        <span>Mountains</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-history')" data-screen="screen-history">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3a9 9 0 00-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0013 21a9 9 0 000-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+        <span>History</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-settings')" data-screen="screen-settings">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.611 3.611 0 0112 15.6z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!--  MOUNTAIN LIBRARY                              -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <section id="screen-mountains" class="screen">
+    <header class="app-header">
+      <button class="header-btn" onclick="showScreen('screen-home')" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <h2 class="header-title">Mountain Library</h2>
+      <div class="header-btn" style="visibility:hidden"></div>
+    </header>
+
+    <div class="mountain-list-scroll">
+      <div id="mountainList" class="mountain-list">
+        <!-- Generated by JS -->
+      </div>
+    </div>
+
+    <nav class="bottom-nav">
+      <button class="nav-item" onclick="showScreen('screen-home')" data-screen="screen-home">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="nav-item active" onclick="showScreen('screen-mountains')" data-screen="screen-mountains">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>
+        <span>Mountains</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-history')" data-screen="screen-history">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3a9 9 0 00-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0013 21a9 9 0 000-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+        <span>History</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-settings')" data-screen="screen-settings">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.611 3.611 0 0112 15.6z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!--  PROGRESS HISTORY                              -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <section id="screen-history" class="screen">
+    <header class="app-header">
+      <button class="header-btn" onclick="showScreen('screen-home')" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <h2 class="header-title">Your Journey</h2>
+      <div class="header-btn" style="visibility:hidden"></div>
+    </header>
+
+    <div class="history-scroll">
+      <!-- Lifetime Stats -->
+      <div class="content-section">
+        <h3 class="card-section-title">Lifetime Statistics</h3>
+        <div class="history-stats-grid">
+          <div class="history-stat">
+            <div class="history-stat-value" id="histSummits">0</div>
+            <div class="history-stat-label">Mountains Conquered</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-value" id="histTotal">0</div>
+            <div class="history-stat-label">Total Sessions</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-value" id="histStreak">0</div>
+            <div class="history-stat-label">Current Streak</div>
+          </div>
+          <div class="history-stat">
+            <div class="history-stat-value" id="histLongest">0</div>
+            <div class="history-stat-label">Longest Streak</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Journey Timeline -->
+      <div class="content-section">
+        <h3 class="card-section-title">Expedition Timeline</h3>
+        <div class="timeline" id="timeline">
+          <!-- Generated by JS -->
+        </div>
+      </div>
+
+      <!-- Achievement Badges -->
+      <div class="content-section">
+        <h3 class="card-section-title">Achievements</h3>
+        <div class="achievements-grid" id="achievementsGrid">
+          <!-- Generated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <nav class="bottom-nav">
+      <button class="nav-item" onclick="showScreen('screen-home')" data-screen="screen-home">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-mountains')" data-screen="screen-mountains">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>
+        <span>Mountains</span>
+      </button>
+      <button class="nav-item active" onclick="showScreen('screen-history')" data-screen="screen-history">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3a9 9 0 00-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0013 21a9 9 0 000-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+        <span>History</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-settings')" data-screen="screen-settings">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.611 3.611 0 0112 15.6z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!--  SETTINGS                                      -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <section id="screen-settings" class="screen">
+    <header class="app-header">
+      <button class="header-btn" onclick="showScreen('screen-home')" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <h2 class="header-title">Settings</h2>
+      <div class="header-btn" style="visibility:hidden"></div>
+    </header>
+
+    <div class="settings-scroll">
+      <!-- Device Info -->
+      <div class="content-section">
+        <h3 class="card-section-title">Device</h3>
+        <div class="settings-item">
+          <span class="settings-label">Connection</span>
+          <span class="settings-value" id="settingsConnection">Disconnected</span>
+        </div>
+        <div class="settings-item">
+          <span class="settings-label">Device Name</span>
+          <span class="settings-value" id="settingsDevice">—</span>
+        </div>
+        <div class="settings-item">
+          <span class="settings-label">Mode</span>
+          <span class="settings-value" id="settingsMode">—</span>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="content-section">
+        <h3 class="card-section-title">Actions</h3>
+        <button class="btn-settings" onclick="connectBLE()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="settings-btn-icon">
+            <path d="M6.5 6.5l11 11M12 2v20M17.5 6.5l-11 11"/>
+          </svg>
+          Reconnect Device
+        </button>
+        <button class="btn-settings btn-danger" onclick="confirmReset()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="settings-btn-icon">
+            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+          </svg>
+          Reset All Progress
+        </button>
+      </div>
+
+      <!-- About -->
+      <div class="content-section">
+        <h3 class="card-section-title">About</h3>
+        <div class="settings-item">
+          <span class="settings-label">App Version</span>
+          <span class="settings-value">1.0.0</span>
+        </div>
+        <div class="settings-item">
+          <span class="settings-label">Project</span>
+          <span class="settings-value">M2 IHM TII 2026</span>
+        </div>
+        <div class="settings-item">
+          <span class="settings-label">BLE Protocol</span>
+          <span class="settings-value">v1.0</span>
+        </div>
+        <p class="about-text">
+          Peak Progress is a tangible interface that gamifies physical activity
+          through mountain climbing. Built as part of the M2 IHM Tangible
+          Interfaces course.
+        </p>
+      </div>
+    </div>
+
+    <nav class="bottom-nav">
+      <button class="nav-item" onclick="showScreen('screen-home')" data-screen="screen-home">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-mountains')" data-screen="screen-mountains">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 6l-3.75 5 2.85 3.8-1.6 1.2C9.81 13.75 7 10 7 10l-6 8h22L14 6z"/></svg>
+        <span>Mountains</span>
+      </button>
+      <button class="nav-item" onclick="showScreen('screen-history')" data-screen="screen-history">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3a9 9 0 00-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0013 21a9 9 0 000-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+        <span>History</span>
+      </button>
+      <button class="nav-item active" onclick="showScreen('screen-settings')" data-screen="screen-settings">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.611 3.611 0 0112 15.6z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  </section>
+
+  <!-- Reset Confirmation Modal -->
+  <div class="modal-overlay" id="resetModal">
+    <div class="modal">
+      <div class="modal-icon">!</div>
+      <h3 class="modal-title">Reset All Progress?</h3>
+      <p class="modal-text">This will erase all mountains, sessions, and streaks. Your climber returns to Colline Locale. This cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
+        <button class="btn-modal-confirm" onclick="executeReset()">Reset Everything</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">
+    <span id="toastIcon">+</span>
+    <span id="toastText">Activity logged!</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
