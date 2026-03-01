@@ -8,7 +8,7 @@
 | ------------ | ------------------------------- | --------------- |
 | **D0 (RX)**  | Circuit Playground TX           | Serial receive  |
 | **D1 (TX)**  | Circuit Playground RX           | Serial transmit |
-| **D9 (PWM)** | SG90 Servo signal (orange wire) | Servo control   |
+| **D8 (PWM)** | SG90 Servo signal (orange wire) | Servo control   |
 | **5V**       | Servo VCC (red wire)            | Shared 5V rail  |
 | **GND**      | Servo GND (brown wire)          | Common ground   |
 | **5V**       | Circuit Playground VCC          | Power to CP     |
@@ -39,7 +39,7 @@
 │  5V ─────────────────────┬─── VCC                   │
 │  GND ────────────────────┤    │                      │
 │                      │   │    │  [Pad #3] ← Touch    │
-│  D9 (PWM)────┐       │   │    │  [LEDs 0-9] Built-in │
+│  D8 (PWM)────┐       │   │    │  [LEDs 0-9] Built-in │
 │              │       │   │    │  [Buzzer]   Built-in │
 │  A4 (SDA)──┐ │       │   │    └──────────────────────┘
 │  A5 (SCL)─┐│ │       │   │

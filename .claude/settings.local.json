@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude auth:*)",
+      "Bash(chmod +x:*)",
+      "Bash(python3:*)",
+      "Bash(rm:*)",
+      "Bash(node:*)",
+      "Bash(gh auth:*)"
+    ]
+  }
+}
