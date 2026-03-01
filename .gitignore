@@ -1,0 +1,17 @@
+# Claude Code
+.claude/
+
+# Playwright / test screenshots
+.playwright-mcp/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Arduino build output
+build/
+*.hex
+
+# OS
+.DS_Store
+Thumbs.db
