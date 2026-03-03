@@ -53,8 +53,8 @@ inline int calculateServoAngle(uint8_t sessions, uint8_t totalSessions) {
   if (totalSessions == 0) return SERVO_MIN_ANGLE;
   if (sessions >= totalSessions) return SERVO_MAX_ANGLE;
 
-  long range = SERVO_MAX_ANGLE - SERVO_MIN_ANGLE; // 150
-  return SERVO_MIN_ANGLE + (int)((range * (long)sessions) / (long)totalSessions);
+  int range = SERVO_MAX_ANGLE - SERVO_MIN_ANGLE; // 150
+  return SERVO_MIN_ANGLE + (range * (int)sessions) / (int)totalSessions;
 }
 
 /**

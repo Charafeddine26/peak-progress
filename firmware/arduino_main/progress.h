@@ -23,7 +23,6 @@
 #define EEPROM_MAGIC       0xA5
 #define EEPROM_ADDR_MAGIC  0
 #define EEPROM_ADDR_DATA   1
-#define FAST_TEST_MODE
 
 // ─── Fast Test Mode ─────────────────────────────────────────
 // Uncomment to reduce sessions-per-mountain to 3 for rapid testing
@@ -128,22 +127,11 @@ inline void checkAndUnlockMountains(UserProgress &prog) {
  * Returns the index, or current index if nothing new is available.
  */
 inline uint8_t findNextMountain(const UserProgress &prog) {
-  // Try the next sequential mountain first
   uint8_t next = prog.currentMountainIndex + 1;
   if (next < NUM_MOUNTAINS && isMountainUnlocked(prog, next)) {
     return next;
   }
-
-  // Otherwise find the first unlocked mountain not yet completed
-  // (simple: just return next if unlocked, else stay)
-  for (uint8_t i = 0; i < NUM_MOUNTAINS; i++) {
-    if (i != prog.currentMountainIndex && isMountainUnlocked(prog, i)) {
-      // For simplicity, always advance sequentially
-      if (i > prog.currentMountainIndex) return i;
-    }
-  }
-
-  // All completed or none available — wrap to challenge mode (re-climb)
+  // All summited or next locked — wrap to challenge mode (re-climb)
   return 0;
 }
 

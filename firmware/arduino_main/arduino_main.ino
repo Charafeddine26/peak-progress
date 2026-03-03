@@ -27,7 +27,9 @@ UserProgress userProgress;
 //  SETUP
 // ═══════════════════════════════════════════════════════════
 void setup() {
+#ifdef HAS_CIRCUIT_PLAYGROUND
   Serial.begin(9600);
+#endif
   delay(500);
 
   // Load progress from EEPROM
