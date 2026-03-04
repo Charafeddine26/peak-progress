@@ -2,10 +2,10 @@
  * mountains.h — Mountain definitions for Peak Progress
  *
  * Defines the Mountain struct, LED color palettes, melody types,
- * and the static library of 9 mountains across 4 tiers.
+ * and the static library of mountains across 4 tiers.
  *
- * LED palettes are guarded behind HAS_CIRCUIT_PLAYGROUND to save
- * flash when the Circuit Playground is not connected.
+ * LED palettes, tier info, and melody types are guarded behind
+ * HAS_CIRCUIT_PLAYGROUND to save flash and SRAM when the CP is absent.
  *
  * Part of the Peak Progress tangible interface project.
  * M2 IHM TII — Tangible Interfaces 2026
@@ -17,14 +17,18 @@
 #include <Arduino.h>
 
 // ─── Compile Flags ──────────────────────────────────────────
-// Uncomment when Circuit Playground is connected:
-#define HAS_CIRCUIT_PLAYGROUND
+// FUTURE: uncomment when Circuit Playground board is connected
+// #define HAS_CIRCUIT_PLAYGROUND
 
 // ─── Constants ──────────────────────────────────────────────
-#define NUM_MOUNTAINS 9
-#define NUM_LEDS      10
+// FUTURE: restore NUM_MOUNTAINS to 9 when Circuit Playground is connected
+#define NUM_MOUNTAINS 3
+#define NUM_LEDS      10  // FUTURE: used with CP LED palettes
 
-// ─── Melody Types ───────────────────────────────────────────
+// ─── Circuit Playground extras (melody types + LED palettes) ─
+#ifdef HAS_CIRCUIT_PLAYGROUND
+
+// FUTURE: restored with CP board
 enum MelodyType : uint8_t {
   MELODY_SIMPLE,
   MELODY_MODERATE,
@@ -32,9 +36,6 @@ enum MelodyType : uint8_t {
   MELODY_EPIC,
   MELODY_LEGENDARY
 };
-
-// ─── LED Color Palettes (only when CP is connected) ─────────
-#ifdef HAS_CIRCUIT_PLAYGROUND
 
 const uint32_t PALETTE_BLUE_GREEN[NUM_LEDS] PROGMEM = {
   0x0000FF, 0x0022DD, 0x0044BB, 0x006699, 0x008877,
@@ -76,44 +77,54 @@ const uint32_t PALETTE_FIRE_PULSE[NUM_LEDS] PROGMEM = {
 #endif // HAS_CIRCUIT_PLAYGROUND
 
 // ─── Mountain Definition ────────────────────────────────────
+// Core fields always present.
+// FUTURE: weeksRequired, tier, ledColors, melody re-added with CP board.
 struct Mountain {
   const char*      name;
-  uint8_t          weeksRequired;
   uint8_t          totalSessions;
-  uint8_t          tier;
-#ifdef HAS_CIRCUIT_PLAYGROUND
-  const uint32_t*  ledColors;
-#endif
-  MelodyType       melody;
   uint8_t          unlockAfterSummits;
+#ifdef HAS_CIRCUIT_PLAYGROUND
+  // FUTURE: restored with CP board
+  uint8_t          weeksRequired;
+  uint8_t          tier;
+  const uint32_t*  ledColors;
+  MelodyType       melody;
+#endif
 };
 
 // ─── Mountain Library ───────────────────────────────────────
+// Without CP: 3-mountain testing set (saves flash + SRAM).
+// FUTURE: restore all 9 mountains when Circuit Playground is connected.
 const Mountain MOUNTAIN_LIBRARY[NUM_MOUNTAINS] = {
 #ifdef HAS_CIRCUIT_PLAYGROUND
-  {"Colline Locale",       1,  7, 1, PALETTE_BLUE_GREEN,          MELODY_SIMPLE,     0},
-  {"Petit Sommet",         1,  7, 1, PALETTE_BLUE_CYAN_GREEN,     MELODY_SIMPLE,     1},
-  {"Mont d'Entrainement",  1,  7, 1, PALETTE_PURPLE_GOLD,         MELODY_MODERATE,   2},
-  {"Mont Blanc",           2, 14, 2, PALETTE_ICE_BLUE_WHITE_GOLD, MELODY_TRIUMPHANT, 3},
-  {"Matterhorn",           2, 14, 2, PALETTE_DARK_PURPLE_RED,     MELODY_TRIUMPHANT, 4},
-  {"Kilimanjaro",          3, 21, 3, PALETTE_WARM_GRADIENT,       MELODY_EPIC,       5},
-  {"Denali",               3, 21, 3, PALETTE_ARCTIC_SHIMMER,      MELODY_EPIC,       6},
-  {"Everest",              4, 28, 4, PALETTE_RAINBOW_SHIMMER,     MELODY_LEGENDARY,  7},
-  {"K2",                   4, 28, 4, PALETTE_FIRE_PULSE,          MELODY_LEGENDARY,  8}
+  // Full library — restored with CP board (NUM_MOUNTAINS must be 9)
+  {"Colline Locale",       7, 0, 1, 1, PALETTE_BLUE_GREEN,          MELODY_SIMPLE     },
+  {"Petit Sommet",         7, 1, 1, 1, PALETTE_BLUE_CYAN_GREEN,     MELODY_SIMPLE     },
+  {"Mont d'Entrainement",  7, 2, 1, 1, PALETTE_PURPLE_GOLD,         MELODY_MODERATE   },
+  {"Mont Blanc",          14, 3, 2, 2, PALETTE_ICE_BLUE_WHITE_GOLD, MELODY_TRIUMPHANT },
+  {"Matterhorn",          14, 4, 2, 2, PALETTE_DARK_PURPLE_RED,     MELODY_TRIUMPHANT },
+  {"Kilimanjaro",         21, 5, 3, 3, PALETTE_WARM_GRADIENT,       MELODY_EPIC       },
+  {"Denali",              21, 6, 3, 3, PALETTE_ARCTIC_SHIMMER,      MELODY_EPIC       },
+  {"Everest",             28, 7, 4, 4, PALETTE_RAINBOW_SHIMMER,     MELODY_LEGENDARY  },
+  {"K2",                  28, 8, 4, 4, PALETTE_FIRE_PULSE,          MELODY_LEGENDARY  },
 #else
-  {"Colline Locale",       1,  7, 1, MELODY_SIMPLE,     0},
-  {"Petit Sommet",         1,  7, 1, MELODY_SIMPLE,     1},
-  {"Mont d'Entrainement",  1,  7, 1, MELODY_MODERATE,   2},
-  {"Mont Blanc",           2, 14, 2, MELODY_TRIUMPHANT, 3},
-  {"Matterhorn",           2, 14, 2, MELODY_TRIUMPHANT, 4},
-  {"Kilimanjaro",          3, 21, 3, MELODY_EPIC,       5},
-  {"Denali",               3, 21, 3, MELODY_EPIC,       6},
-  {"Everest",              4, 28, 4, MELODY_LEGENDARY,  7},
-  {"K2",                   4, 28, 4, MELODY_LEGENDARY,  8}
+  // Testing set — 3 tier-1 mountains, no CP needed
+  {"Colline Locale",       7, 0},
+  {"Petit Sommet",         7, 1},
+  {"Mont d'Entrainement",  7, 2},
+  /* FUTURE: restore remaining 6 mountains with CP board (set NUM_MOUNTAINS 9):
+  {"Mont Blanc",          14, 3},
+  {"Matterhorn",          14, 4},
+  {"Kilimanjaro",         21, 5},
+  {"Denali",              21, 6},
+  {"Everest",             28, 7},
+  {"K2",                  28, 8},
+  */
 #endif
 };
 
 // ─── Helper ─────────────────────────────────────────────────
+// FUTURE: restored with CP board
 #ifdef HAS_CIRCUIT_PLAYGROUND
 inline uint32_t getMountainColor(const Mountain &mtn, uint8_t ledIndex) {
   if (ledIndex >= NUM_LEDS) return 0;
