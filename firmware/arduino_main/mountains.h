@@ -18,7 +18,7 @@
 
 // ─── Compile Flags ──────────────────────────────────────────
 // Uncomment when Circuit Playground is connected:
-#define HAS_CIRCUIT_PLAYGROUND
+// #define HAS_CIRCUIT_PLAYGROUND
 
 // ─── Constants ──────────────────────────────────────────────
 #define NUM_MOUNTAINS 9
