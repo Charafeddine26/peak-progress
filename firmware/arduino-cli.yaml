@@ -1,0 +1,8 @@
+board_manager:
+  additional_urls:
+    - https://downloads.arduino.cc/packages/package_index.json
+
+directories:
+  data: ./data
+  downloads: ./data/staging
+  user: ./data/user

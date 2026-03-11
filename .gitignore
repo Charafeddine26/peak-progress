@@ -12,6 +12,9 @@ npm-debug.log*
 build/
 *.hex
 
+# arduino-cli local data (downloaded cores/libraries)
+firmware/data/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -85,6 +85,31 @@ Open **https://localhost:8443** in Chrome. Accept the self-signed cert warning.
 
 ---
 
+## Alternative: Build with arduino-cli
+
+If your sketch exceeds 100% flash when compiling in the Arduino IDE, it's likely due to mismatched board core or library versions. The `build.bat` script compiles with **pinned versions** to guarantee a consistent binary size.
+
+### One-time setup
+
+1. Install arduino-cli:
+   ```
+   winget install ArduinoSA.CLI
+   ```
+2. Restart your terminal
+
+### Build
+
+```bash
+cd firmware
+build.bat
+```
+
+The script automatically downloads the correct core (`arduino:megaavr@1.8.8`) and library (`ArduinoBLE@1.5.0`) on first run. Subsequent runs reuse the cached versions.
+
+> This does **not** replace the Arduino IDE — you still upload firmware from the IDE. This just verifies your build compiles with the correct versions.
+
+---
+
 ## BLE Reference
 
 | Characteristic | UUID suffix | Properties    | Content                             |
