@@ -1,9 +1,13 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
 :: ─── Arduino-CLI Consistent Build Script ─────────────────────
 :: Compiles arduino_main with pinned core and library versions
 :: to ensure identical binary output across all team machines.
+::
+:: Usage:
+::   build.bat          - compile only (verify it fits)
+::   build.bat upload   - compile + upload to board
 :: ──────────────────────────────────────────────────────────────
 
 set CONFIG=--config-file arduino-cli.yaml
@@ -64,8 +68,87 @@ echo ============================================
 echo   BUILD SUCCEEDED
 echo   Flash limit: %FLASH_LIMIT% bytes
 echo ============================================
-echo.
-echo If the sketch size above is under %FLASH_LIMIT% bytes,
-echo it will fit on the Arduino Uno WiFi Rev.2.
 
+:: ─── Upload if requested ─────────────────────────────────────
+if /i not "%~1"=="upload" goto :done
+
+echo.
+echo Detecting connected boards...
+echo.
+
+set "TMPFILE=%TEMP%\arduino_boards_%RANDOM%.txt"
+arduino-cli board list --format text %CONFIG% > "%TMPFILE%" 2>&1
+
+set BOARD_COUNT=0
+set HEADER_SKIPPED=0
+for /f "usebackq tokens=1,* delims= " %%a in ("%TMPFILE%") do (
+    if !HEADER_SKIPPED!==0 (
+        set HEADER_SKIPPED=1
+    ) else (
+        echo %%a | findstr /r "^COM ^/dev" >nul 2>&1
+        if !errorlevel!==0 (
+            set /a BOARD_COUNT+=1
+            set "PORT_!BOARD_COUNT!=%%a"
+            set "INFO_!BOARD_COUNT!=%%b"
+        )
+    )
+)
+
+if %BOARD_COUNT%==0 (
+    echo   No boards detected.
+    echo.
+    echo   Make sure your Arduino is:
+    echo     - Plugged in via USB
+    echo     - Drivers are installed
+    echo     - Not in use by another program ^(Arduino IDE, Serial Monitor^)
+    del "%TMPFILE%" >nul 2>&1
+    exit /b 1
+)
+
+if %BOARD_COUNT%==1 (
+    set "SELECTED_PORT=!PORT_1!"
+    echo   Found board on !SELECTED_PORT!
+    echo   !INFO_1!
+    goto :upload
+)
+
+echo   Detected boards:
+echo.
+for /l %%i in (1,1,%BOARD_COUNT%) do (
+    echo     %%i^) !PORT_%%i! - !INFO_%%i!
+)
+echo.
+set /p CHOICE="  Select board (1-%BOARD_COUNT%): "
+
+set "SELECTED_PORT="
+if %CHOICE% geq 1 if %CHOICE% leq %BOARD_COUNT% (
+    set "SELECTED_PORT=!PORT_%CHOICE%!"
+)
+
+if "%SELECTED_PORT%"=="" (
+    echo   Invalid selection.
+    del "%TMPFILE%" >nul 2>&1
+    exit /b 1
+)
+
+:upload
+del "%TMPFILE%" >nul 2>&1
+echo.
+echo Uploading to %SELECTED_PORT%...
+arduino-cli upload --fqbn %FQBN% --port %SELECTED_PORT% %SKETCH% %CONFIG% 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo ============================================
+    echo   UPLOAD FAILED
+    echo ============================================
+    echo Make sure the board is plugged in and not
+    echo in use by another program.
+    exit /b 1
+)
+echo.
+echo ============================================
+echo   UPLOAD SUCCEEDED  [%SELECTED_PORT%]
+echo ============================================
+
+:done
 exit /b 0
