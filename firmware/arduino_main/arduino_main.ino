@@ -27,8 +27,10 @@ UserProgress userProgress;
 //  SETUP
 // ═══════════════════════════════════════════════════════════
 void setup() {
+  Serial.begin(9600); // USB debug logging
 #ifdef HAS_CIRCUIT_PLAYGROUND
-  Serial.begin(9600);
+  initCPSerial();     // SoftwareSerial to Circuit Playground on D2/D3
+  Serial.println(F("[ARD] Circuit Playground serial initialized on D2/D3"));
 #endif
   delay(500);
 
@@ -42,7 +44,7 @@ void setup() {
 
   // Initialize BLE
   if (initBLE()) {
-    updateAllBLE(userProgress);
+    updateBLEProgress(userProgress);
   }
 
   // Initialize LCD display
@@ -62,6 +64,7 @@ void setup() {
 void loop() {
 #ifdef HAS_CIRCUIT_PLAYGROUND
   if (serialTouchDetected()) {
+    Serial.println(F("[ARD] Touch received from CP!"));
     logActivity();
   }
 #endif
@@ -108,7 +111,7 @@ void logActivity() {
     summitReached();
   }
 
-  updateAllBLE(userProgress);
+  updateBLEProgress(userProgress);
   updateDisplay(userProgress);
 }
 
@@ -147,7 +150,7 @@ void summitReached() {
 #endif
 
   updateDisplay(userProgress);
-  updateAllBLE(userProgress);
+  updateBLEProgress(userProgress);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -165,7 +168,7 @@ void handleBLECommand(uint8_t cmd) {
 #ifdef HAS_CIRCUIT_PLAYGROUND
       sendClearLEDs();
 #endif
-      updateAllBLE(userProgress);
+      updateBLEProgress(userProgress);
       updateDisplay(userProgress);
       break;
 

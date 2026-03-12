@@ -1,6 +1,7 @@
 board_manager:
   additional_urls:
     - https://downloads.arduino.cc/packages/package_index.json
+    - https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
 
 directories:
   data: ./data

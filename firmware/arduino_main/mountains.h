@@ -17,12 +17,12 @@
 #include <Arduino.h>
 
 // ─── Compile Flags ──────────────────────────────────────────
-// FUTURE: uncomment when Circuit Playground board is connected
-// #define HAS_CIRCUIT_PLAYGROUND
+// Circuit Playground board is connected via serial (D0/D1)
+#define HAS_CIRCUIT_PLAYGROUND
 
 // ─── Constants ──────────────────────────────────────────────
-// FUTURE: restore NUM_MOUNTAINS to 9 when Circuit Playground is connected
-#define NUM_MOUNTAINS 3
+// Full 9-mountain library active with Circuit Playground
+#define NUM_MOUNTAINS 9
 #define NUM_LEDS      10  // FUTURE: used with CP LED palettes
 
 // ─── Circuit Playground extras (melody types + LED palettes) ─
