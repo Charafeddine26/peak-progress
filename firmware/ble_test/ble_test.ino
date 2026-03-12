@@ -1,31 +1,169 @@
 /**
- * ble_test.ino — Minimal BLE test sketch
+ * ble_test.ino — Functional BLE test with servo + progress
  *
- * Does nothing except start BLE advertising.
- * If "PeakTest" appears in Bluetooth settings, BLE works.
+ * Stripped-down Peak Progress: BLE + servo + EEPROM.
+ * No Circuit Playground, no display, no serial protocol.
+ * Upload via Arduino IDE with ArduinoBLE installed.
  */
 
 #include <ArduinoBLE.h>
+#include <EEPROM.h>
+#include <Servo.h>
+
+// ─── BLE ─────────────────────────────────────────────────────
+#define SERVICE_UUID       "19B10000-E8F2-537E-4F6C-D104768A1214"
+#define CHAR_PROGRESS_UUID "19B10001-E8F2-537E-4F6C-D104768A1214"
+#define CHAR_COMMAND_UUID  "19B10003-E8F2-537E-4F6C-D104768A1214"
+
+#define CMD_LOG_ACTIVITY 0x01
+#define CMD_RESET        0x02
+
+BLEService peakService(SERVICE_UUID);
+BLECharacteristic progressChar(CHAR_PROGRESS_UUID, BLERead | BLENotify, 8);
+BLECharacteristic commandChar(CHAR_COMMAND_UUID, BLEWrite, 1);
+
+// ─── Servo ───────────────────────────────────────────────────
+#define SERVO_PIN 8
+#define SERVO_MIN 20
+#define SERVO_MAX 170
+Servo climberServo;
+
+// ─── Progress ────────────────────────────────────────────────
+#define EEPROM_MAGIC      0xA5
+#define SESSIONS_PER_MTN  3  // Fast test mode
+
+struct Progress {
+  uint8_t mountain;
+  uint8_t sessions;
+  uint8_t summits;
+  uint16_t total;
+};
+
+Progress prog = {0, 0, 0, 0};
+
+const char* mtnNames[] = {
+  "Colline Locale", "Petit Sommet", "Mont Entrainement"
+};
+
+// ─── Functions ───────────────────────────────────────────────
+
+void loadProgress() {
+  if (EEPROM.read(0) != EEPROM_MAGIC) {
+    prog = {0, 0, 0, 0};
+    EEPROM.write(0, EEPROM_MAGIC);
+    EEPROM.put(1, prog);
+    return;
+  }
+  EEPROM.get(1, prog);
+  if (prog.mountain >= 3) {
+    prog = {0, 0, 0, 0};
+    EEPROM.put(1, prog);
+  }
+}
+
+void saveProgress() {
+  EEPROM.put(1, prog);
+}
+
+void updateBLE() {
+  uint8_t data[8] = {
+    prog.mountain, prog.sessions, SESSIONS_PER_MTN,
+    prog.summits, 0, 0,
+    (uint8_t)(prog.total >> 8), (uint8_t)(prog.total & 0xFF)
+  };
+  progressChar.writeValue(data, 8);
+}
+
+void moveServo(int angle) {
+  climberServo.attach(SERVO_PIN);
+  climberServo.write(angle);
+  delay(500);
+  climberServo.detach();
+}
+
+int calcAngle() {
+  return SERVO_MIN + ((long)prog.sessions * (SERVO_MAX - SERVO_MIN)) / SESSIONS_PER_MTN;
+}
+
+void logActivity() {
+  if (prog.sessions >= SESSIONS_PER_MTN) return;
+
+  prog.sessions++;
+  prog.total++;
+
+  moveServo(calcAngle());
+  saveProgress();
+
+  Serial.print("Session ");
+  Serial.print(prog.sessions);
+  Serial.print("/");
+  Serial.print(SESSIONS_PER_MTN);
+  Serial.print(" on ");
+  Serial.println(mtnNames[prog.mountain]);
+
+  if (prog.sessions >= SESSIONS_PER_MTN) {
+    Serial.println("SUMMIT!");
+    delay(2000);
+    prog.summits++;
+    prog.mountain = (prog.mountain + 1) % 3;
+    prog.sessions = 0;
+    saveProgress();
+    moveServo(SERVO_MIN);
+  }
+
+  updateBLE();
+}
+
+void resetProgress() {
+  prog = {0, 0, 0, 0};
+  saveProgress();
+  moveServo(SERVO_MIN);
+  updateBLE();
+  Serial.println("Progress reset!");
+}
+
+// ─── Setup & Loop ────────────────────────────────────────────
 
 void setup() {
   Serial.begin(9600);
-  delay(1000);
+  delay(500);
 
+  loadProgress();
+
+  // Servo
+  moveServo(calcAngle());
+
+  // BLE
   Serial.println("Starting BLE...");
-
   if (!BLE.begin()) {
     Serial.println("BLE FAILED!");
-    while (1); // Stop here
+    while (1);
   }
 
-  BLE.setLocalName("PeakTest");
+  BLE.setLocalName("PeakProgress");
+  BLE.setAdvertisedService(peakService);
+  peakService.addCharacteristic(progressChar);
+  peakService.addCharacteristic(commandChar);
+  BLE.addService(peakService);
   BLE.advertise();
 
-  Serial.print("BLE OK! Address: ");
-  Serial.println(BLE.address());
-  Serial.println("Look for 'PeakTest' in Bluetooth settings.");
+  updateBLE();
+
+  Serial.println("BLE OK - Ready!");
+  Serial.print("Mountain: ");
+  Serial.println(mtnNames[prog.mountain]);
 }
 
 void loop() {
+  BLEDevice central = BLE.central();
+
+  if (central && central.connected()) {
+    if (commandChar.written()) {
+      uint8_t cmd = commandChar.value()[0];
+      if (cmd == CMD_LOG_ACTIVITY) logActivity();
+      else if (cmd == CMD_RESET) resetProgress();
+    }
+  }
+
   BLE.poll();
 }
