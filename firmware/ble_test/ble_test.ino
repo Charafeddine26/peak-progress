@@ -13,14 +13,18 @@
 // ─── BLE ─────────────────────────────────────────────────────
 #define SERVICE_UUID       "19B10000-E8F2-537E-4F6C-D104768A1214"
 #define CHAR_PROGRESS_UUID "19B10001-E8F2-537E-4F6C-D104768A1214"
+#define CHAR_MOUNTAIN_UUID "19B10002-E8F2-537E-4F6C-D104768A1214"
 #define CHAR_COMMAND_UUID  "19B10003-E8F2-537E-4F6C-D104768A1214"
+#define CHAR_UNLOCK_UUID   "19B10004-E8F2-537E-4F6C-D104768A1214"
 
 #define CMD_LOG_ACTIVITY 0x01
 #define CMD_RESET        0x02
 
 BLEService peakService(SERVICE_UUID);
 BLECharacteristic progressChar(CHAR_PROGRESS_UUID, BLERead | BLENotify, 8);
+BLECharacteristic mountainChar(CHAR_MOUNTAIN_UUID, BLERead | BLENotify, 20);
 BLECharacteristic commandChar(CHAR_COMMAND_UUID, BLEWrite, 1);
+BLECharacteristic unlockChar(CHAR_UNLOCK_UUID, BLERead | BLENotify, 2);
 
 // ─── Servo ───────────────────────────────────────────────────
 #define SERVO_PIN 8
@@ -30,6 +34,7 @@ Servo climberServo;
 
 // ─── Progress ────────────────────────────────────────────────
 #define EEPROM_MAGIC      0xA5
+#define NUM_MOUNTAINS     3
 #define SESSIONS_PER_MTN  3  // Fast test mode
 
 struct Progress {
@@ -55,7 +60,7 @@ void loadProgress() {
     return;
   }
   EEPROM.get(1, prog);
-  if (prog.mountain >= 3) {
+  if (prog.mountain >= NUM_MOUNTAINS) {
     prog = {0, 0, 0, 0};
     EEPROM.put(1, prog);
   }
@@ -66,12 +71,30 @@ void saveProgress() {
 }
 
 void updateBLE() {
+  // Progress: 8 bytes
   uint8_t data[8] = {
     prog.mountain, prog.sessions, SESSIONS_PER_MTN,
     prog.summits, 0, 0,
     (uint8_t)(prog.total >> 8), (uint8_t)(prog.total & 0xFF)
   };
   progressChar.writeValue(data, 8);
+
+  // Mountain name: 20-byte string
+  char nameBuf[20];
+  memset(nameBuf, 0, 20);
+  strncpy(nameBuf, mtnNames[prog.mountain], 19);
+  mountainChar.writeValue(nameBuf, 20);
+
+  // Unlock bitfield: 2 bytes (unlock mountains based on summits)
+  uint16_t unlocked = 0;
+  for (uint8_t i = 0; i < NUM_MOUNTAINS; i++) {
+    if (prog.summits >= i) unlocked |= (1 << i);
+  }
+  uint8_t unlockData[2] = {
+    (uint8_t)(unlocked & 0xFF),
+    (uint8_t)(unlocked >> 8)
+  };
+  unlockChar.writeValue(unlockData, 2);
 }
 
 void moveServo(int angle) {
@@ -105,10 +128,12 @@ void logActivity() {
     Serial.println("SUMMIT!");
     delay(2000);
     prog.summits++;
-    prog.mountain = (prog.mountain + 1) % 3;
+    prog.mountain = (prog.mountain + 1) % NUM_MOUNTAINS;
     prog.sessions = 0;
     saveProgress();
     moveServo(SERVO_MIN);
+    Serial.print("New mountain: ");
+    Serial.println(mtnNames[prog.mountain]);
   }
 
   updateBLE();
@@ -129,12 +154,9 @@ void setup() {
   delay(500);
 
   loadProgress();
-
-  // Servo
   moveServo(calcAngle());
 
   // BLE
-  Serial.println("Starting BLE...");
   if (!BLE.begin()) {
     Serial.println("BLE FAILED!");
     while (1);
@@ -143,15 +165,21 @@ void setup() {
   BLE.setLocalName("PeakProgress");
   BLE.setAdvertisedService(peakService);
   peakService.addCharacteristic(progressChar);
+  peakService.addCharacteristic(mountainChar);
   peakService.addCharacteristic(commandChar);
+  peakService.addCharacteristic(unlockChar);
   BLE.addService(peakService);
   BLE.advertise();
 
   updateBLE();
 
-  Serial.println("BLE OK - Ready!");
+  Serial.println("Ready!");
   Serial.print("Mountain: ");
   Serial.println(mtnNames[prog.mountain]);
+  Serial.print("Sessions: ");
+  Serial.print(prog.sessions);
+  Serial.print("/");
+  Serial.println(SESSIONS_PER_MTN);
 }
 
 void loop() {
