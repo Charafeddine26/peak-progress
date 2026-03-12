@@ -23,17 +23,28 @@
 // ─── Command Codes ──────────────────────────────────────────
 #define CMD_LOG_ACTIVITY   0x01
 #define CMD_RESET          0x02
-#define CMD_SELECT_MOUNT   0x03
 
 // ─── BLE Objects ────────────────────────────────────────────
 BLEService peakService(SERVICE_UUID);
 BLECharacteristic progressChar(CHAR_PROGRESS_UUID, BLERead | BLENotify, 8);
-BLEByteCharacteristic commandChar(CHAR_COMMAND_UUID, BLEWrite);
+BLECharacteristic commandChar(CHAR_COMMAND_UUID, BLEWrite, 1);
 
 inline bool initBLE() {
-  if (!BLE.begin()) return false;
+  Serial.println(F("[BLE] Calling BLE.begin()..."));
+  int bleResult = BLE.begin();
+  Serial.print(F("[BLE] BLE.begin() returned: "));
+  Serial.println(bleResult);
 
-  BLE.setLocalName("PeakProgress");
+  if (!bleResult) {
+    Serial.println(F("[BLE] FAILED - possible causes:"));
+    Serial.println(F("[BLE]   1. NINA module firmware outdated (update via WiFiNINA FirmwareUpdater)"));
+    Serial.println(F("[BLE]   2. ArduinoBLE library conflict (remove global install, we use local lib)"));
+    Serial.println(F("[BLE]   3. SPI communication issue with NINA module"));
+    Serial.println(F("[BLE]   4. Board is not Arduino Uno WiFi Rev.2"));
+    return false;
+  }
+
+  BLE.setLocalName("Peak");
   BLE.setAdvertisedService(peakService);
 
   peakService.addCharacteristic(progressChar);
@@ -41,6 +52,10 @@ inline bool initBLE() {
 
   BLE.addService(peakService);
   BLE.advertise();
+
+  Serial.print(F("[BLE] Address: "));
+  Serial.println(BLE.address());
+  Serial.println(F("[BLE] Advertising started"));
   return true;
 }
 
@@ -61,16 +76,12 @@ inline void updateBLEProgress(const UserProgress &prog) {
   progressChar.writeValue(data, 8);
 }
 
-inline void updateAllBLE(const UserProgress &prog) {
-  updateBLEProgress(prog);
-}
-
 inline uint8_t checkBLECommand() {
   BLEDevice central = BLE.central();
 
   if (central && central.connected()) {
     if (commandChar.written()) {
-      return commandChar.value();
+      return commandChar.value()[0];
     }
   }
 
