@@ -1,8 +1,8 @@
 /**
- * ble_test.ino — Functional BLE test with servo + progress
+ * ble_test.ino — Peak Progress firmware (no Circuit Playground)
  *
- * Stripped-down Peak Progress: BLE + servo + EEPROM.
- * No Circuit Playground, no display, no serial protocol.
+ * Full functionality: BLE + servo + EEPROM + mountain progression.
+ * Equivalent to arduino_main with HAS_CIRCUIT_PLAYGROUND disabled.
  * Upload via Arduino IDE with ArduinoBLE installed.
  */
 
@@ -30,7 +30,9 @@ BLECharacteristic unlockChar(CHAR_UNLOCK_UUID, BLERead | BLENotify, 2);
 #define SERVO_PIN 8
 #define SERVO_MIN 20
 #define SERVO_MAX 170
+#define SERVO_STEP_DELAY 15
 Servo climberServo;
+int currentAngle = SERVO_MIN;
 
 // ─── Progress ────────────────────────────────────────────────
 #define EEPROM_MAGIC      0xA5
@@ -41,27 +43,30 @@ struct Progress {
   uint8_t mountain;
   uint8_t sessions;
   uint8_t summits;
+  uint8_t streakDays;
+  uint8_t longestStreak;
   uint16_t total;
 };
 
-Progress prog = {0, 0, 0, 0};
+Progress prog = {0, 0, 0, 0, 0, 0};
 
 const char* mtnNames[] = {
   "Colline Locale", "Petit Sommet", "Mont Entrainement"
 };
+const uint8_t mtnUnlockAfter[] = {0, 1, 2};
 
 // ─── Functions ───────────────────────────────────────────────
 
 void loadProgress() {
   if (EEPROM.read(0) != EEPROM_MAGIC) {
-    prog = {0, 0, 0, 0};
+    prog = {0, 0, 0, 0, 0, 0};
     EEPROM.write(0, EEPROM_MAGIC);
     EEPROM.put(1, prog);
     return;
   }
   EEPROM.get(1, prog);
   if (prog.mountain >= NUM_MOUNTAINS) {
-    prog = {0, 0, 0, 0};
+    prog = {0, 0, 0, 0, 0, 0};
     EEPROM.put(1, prog);
   }
 }
@@ -70,26 +75,31 @@ void saveProgress() {
   EEPROM.put(1, prog);
 }
 
+uint16_t calcUnlockBitfield() {
+  uint16_t unlocked = 0;
+  for (uint8_t i = 0; i < NUM_MOUNTAINS; i++) {
+    if (prog.summits >= mtnUnlockAfter[i]) unlocked |= (1 << i);
+  }
+  return unlocked;
+}
+
 void updateBLE() {
   // Progress: 8 bytes
   uint8_t data[8] = {
     prog.mountain, prog.sessions, SESSIONS_PER_MTN,
-    prog.summits, 0, 0,
+    prog.summits, prog.streakDays, prog.longestStreak,
     (uint8_t)(prog.total >> 8), (uint8_t)(prog.total & 0xFF)
   };
   progressChar.writeValue(data, 8);
 
   // Mountain name: 20-byte string
-  char nameBuf[20];
+  uint8_t nameBuf[20];
   memset(nameBuf, 0, 20);
-  strncpy(nameBuf, mtnNames[prog.mountain], 19);
-  mountainChar.writeValue(nameBuf, 20);
+  strncpy((char*)nameBuf, mtnNames[prog.mountain], 19);
+  mountainChar.writeValue((const uint8_t*)nameBuf, 20);
 
-  // Unlock bitfield: 2 bytes (unlock mountains based on summits)
-  uint16_t unlocked = 0;
-  for (uint8_t i = 0; i < NUM_MOUNTAINS; i++) {
-    if (prog.summits >= i) unlocked |= (1 << i);
-  }
+  // Unlock bitfield: 2 bytes
+  uint16_t unlocked = calcUnlockBitfield();
   uint8_t unlockData[2] = {
     (uint8_t)(unlocked & 0xFF),
     (uint8_t)(unlocked >> 8)
@@ -97,9 +107,16 @@ void updateBLE() {
   unlockChar.writeValue(unlockData, 2);
 }
 
-void moveServo(int angle) {
+void moveServoSmooth(int target) {
   climberServo.attach(SERVO_PIN);
-  climberServo.write(angle);
+  target = constrain(target, SERVO_MIN, SERVO_MAX);
+
+  int step = (target > currentAngle) ? 1 : -1;
+  while (currentAngle != target) {
+    currentAngle += step;
+    climberServo.write(currentAngle);
+    delay(SERVO_STEP_DELAY);
+  }
   delay(500);
   climberServo.detach();
 }
@@ -108,13 +125,26 @@ int calcAngle() {
   return SERVO_MIN + ((long)prog.sessions * (SERVO_MAX - SERVO_MIN)) / SESSIONS_PER_MTN;
 }
 
+uint8_t findNextMountain() {
+  uint16_t unlocked = calcUnlockBitfield();
+  uint8_t next = prog.mountain + 1;
+  if (next < NUM_MOUNTAINS && (unlocked & (1 << next))) {
+    return next;
+  }
+  return 0; // Wrap to first mountain
+}
+
 void logActivity() {
   if (prog.sessions >= SESSIONS_PER_MTN) return;
 
   prog.sessions++;
   prog.total++;
+  prog.streakDays++;
+  if (prog.streakDays > prog.longestStreak) {
+    prog.longestStreak = prog.streakDays;
+  }
 
-  moveServo(calcAngle());
+  moveServoSmooth(calcAngle());
   saveProgress();
 
   Serial.print("Session ");
@@ -126,23 +156,30 @@ void logActivity() {
 
   if (prog.sessions >= SESSIONS_PER_MTN) {
     Serial.println("SUMMIT!");
-    delay(2000);
+    delay(3000);
+
     prog.summits++;
-    prog.mountain = (prog.mountain + 1) % NUM_MOUNTAINS;
+    uint8_t nextIdx = findNextMountain();
+
+    if (nextIdx != prog.mountain) {
+      Serial.print("New mountain: ");
+      Serial.println(mtnNames[nextIdx]);
+      delay(2000);
+    }
+
+    prog.mountain = nextIdx;
     prog.sessions = 0;
     saveProgress();
-    moveServo(SERVO_MIN);
-    Serial.print("New mountain: ");
-    Serial.println(mtnNames[prog.mountain]);
+    moveServoSmooth(SERVO_MIN);
   }
 
   updateBLE();
 }
 
 void resetProgress() {
-  prog = {0, 0, 0, 0};
+  prog = {0, 0, 0, 0, 0, 0};
   saveProgress();
-  moveServo(SERVO_MIN);
+  moveServoSmooth(SERVO_MIN);
   updateBLE();
   Serial.println("Progress reset!");
 }
@@ -154,7 +191,8 @@ void setup() {
   delay(500);
 
   loadProgress();
-  moveServo(calcAngle());
+  currentAngle = calcAngle();
+  moveServoSmooth(currentAngle);
 
   // BLE
   if (!BLE.begin()) {
