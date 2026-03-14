@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 :: ─── Arduino-CLI Consistent Build Script ─────────────────────
-:: Compiles arduino_main with pinned core and library versions
+:: Compiles peak_progress with pinned core and library versions
 :: to ensure identical binary output across all team machines.
 ::
 :: Usage:
@@ -12,7 +12,7 @@ setlocal enabledelayedexpansion
 
 set CONFIG=--config-file arduino-cli.yaml
 set FQBN=arduino:megaavr:uno2018
-set SKETCH=arduino_main\arduino_main.ino
+set SKETCH=peak_progress\peak_progress.ino
 set CORE=arduino:megaavr@1.8.8
 set LIB=ArduinoBLE@1.5.0
 set FLASH_LIMIT=48640

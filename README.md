@@ -1,17 +1,19 @@
 # Peak Progress
 
-A tangible mountain-climbing interface. Log physical activity by touching a sensor at the base of a 3D-printed mountain — a climber figure ascends as progress accumulates across a nine-mountain challenge.
+A tangible mountain-climbing interface that gamifies physical activity. Touch a sensor, and a climber figure physically ascends a mountain via a servo-driven pulley. Track your progress from your phone over Bluetooth.
+
+Built for the M2 IHM Tangible Interfaces course, 2026.
 
 ---
 
-## Current Hardware Status
+## Hardware
 
-| Component                   | Status          | Role                                  |
-| --------------------------- | --------------- | ------------------------------------- |
-| Arduino Uno WiFi Rev.2      | ✅ Everyone has | BLE host, servo control, EEPROM       |
-| Adafruit Circuit Playground | 🔜 Next week   | Touch sensor, NeoPixels, buzzer       |
-| SG90 Micro Servo            | ✅ From kit     | Drives the climber up the mountain    |
-| Grove OLED 0.96" (optional) | ✅ From kit     | Local display                         |
+| Component              | Role                            |
+| ---------------------- | ------------------------------- |
+| Arduino Uno WiFi Rev.2 | BLE host, servo control, EEPROM |
+| SG90 Micro Servo       | Drives the climber figure       |
+
+The servo is wired to **pin 8**. No external libraries needed for servo control — the firmware drives it directly via PWM pulses.
 
 ---
 
@@ -19,51 +21,40 @@ A tangible mountain-climbing interface. Log physical activity by touching a sens
 
 ```
 firmware/
-  arduino_main/       ← Upload to Arduino Uno WiFi Rev.2
-  circuit_playground/ ← Upload to Adafruit Circuit Playground (next week)
+  peak_progress/        <- Single-file firmware (upload to Arduino)
+  build.bat             <- Compile with pinned versions via arduino-cli
+  arduino-cli.yaml      <- arduino-cli configuration
 mobile-app/
-  index.html          ← Web companion app
-  app.js
-  style.css
-  key.pem / cert.pem  ← Self-signed SSL certs (already included)
-docs/                 ← Full protocol and wiring documentation
+  index.html            <- Web companion app (5 screens)
+  app.js                <- BLE + UI logic
+  style.css             <- Dark theme styling
+  cert.pem / key.pem    <- Self-signed SSL certs for HTTPS
+docs/
+  plans/                <- Design documents
 ```
 
 ---
 
 ## Quick Start
 
-### Step 1 — Clone
+### 1. Upload Firmware
 
+**Option A — Arduino IDE:**
+1. Open `firmware/peak_progress/peak_progress.ino`
+2. Install `ArduinoBLE` library (Sketch > Include Library > Manage Libraries)
+3. Select board: Arduino Uno WiFi Rev2
+4. Upload
+
+**Option B — arduino-cli:**
 ```bash
-git clone https://github.com/swae2/peak-progress.git
-cd peak-progress
+cd firmware
+build.bat            # compile only
+build.bat upload     # compile + upload
 ```
 
-### Step 2 — Install Arduino Library
+The build script pins `arduino:megaavr@1.8.8` and `ArduinoBLE@1.5.0` for consistent builds across machines.
 
-In Arduino IDE: **Sketch → Include Library → Manage Libraries**, install:
-- `ArduinoBLE`
-
-### Step 3 — Upload Firmware to Arduino
-
-1. Plug Arduino Uno WiFi Rev.2 into USB
-2. Arduino IDE: **Tools → Board → Arduino Uno WiFi Rev2**
-3. Arduino IDE: **Tools → Port → (select the Arduino port)**
-4. Open `firmware/arduino_main/arduino_main.ino`
-5. Click **Upload**
-
-### Step 4 — Enable Fast Test Mode
-
-In `firmware/arduino_main/progress.h`, uncomment line 23:
-
-```cpp
-#define FAST_TEST_MODE
-```
-
-This reduces each mountain from 7–28 sessions down to **3**, so you can test the full 9-mountain progression quickly. Re-upload after the change.
-
-### Step 5 — Run the Web App
+### 2. Run the Web App
 
 ```bash
 cd mobile-app
@@ -72,66 +63,55 @@ npx http-server ./ -S -C cert.pem -K key.pem -p 8443
 
 Open **https://localhost:8443** in Chrome. Accept the self-signed cert warning.
 
-> **Browser support:** Chrome on Android and desktop (Windows/macOS/Linux). iOS is not supported — see `docs/ios_ble_limitation.md`.
+### 3. Connect
 
-### Step 6 — Connect and Test
-
-1. Click **Connect to Device** in the web app
+1. Click **Scan & Connect**
 2. Select **PeakProgress** from the Bluetooth popup
-3. Use the **Log Activity** button in the app to simulate a tap → servo should move, LEDs light up
-4. Check **Serial Monitor** (9600 baud) for debug output
+3. Use **Log Activity** to drive the climber
 
-> The physical touch input (Circuit Playground pad #3) is not available yet. For now, use the web app's Log Activity button to drive the device.
-
----
-
-## Alternative: Build with arduino-cli
-
-If your sketch exceeds 100% flash when compiling in the Arduino IDE, it's likely due to mismatched board core or library versions. The `build.bat` script compiles with **pinned versions** to guarantee a consistent binary size.
-
-### One-time setup
-
-1. Install arduino-cli:
-   ```
-   winget install ArduinoSA.CLI
-   ```
-2. Restart your terminal
-
-### Build
-
-```bash
-cd firmware
-build.bat
-```
-
-The script automatically downloads the correct core (`arduino:megaavr@1.8.8`) and library (`ArduinoBLE@1.5.0`) on first run. Subsequent runs reuse the cached versions.
-
-> This does **not** replace the Arduino IDE — you still upload firmware from the IDE. This just verifies your build compiles with the correct versions.
+Or use **Demo Mode** to test the app without hardware.
 
 ---
 
-## BLE Reference
-
-| Characteristic | UUID suffix | Properties    | Content                             |
-| -------------- | ----------- | ------------- | ----------------------------------- |
-| Progress       | `...0001`   | Read + Notify | 8 bytes: sessions, streaks, totals  |
-| Mountain       | `...0002`   | Read + Notify | 20-byte string: mountain name       |
-| Command        | `...0003`   | Write         | `0x01` = log activity, `0x02` = reset |
-| Unlock         | `...0004`   | Read + Notify | 2-byte bitfield: unlocked mountains |
+## BLE Protocol
 
 Service UUID: `19b10000-e8f2-537e-4f6c-d104768a1214`
 
-Full spec: `docs/BLE_protocol.md`
+| Characteristic | UUID suffix | Properties    | Content                               |
+| -------------- | ----------- | ------------- | ------------------------------------- |
+| Progress       | `...0001`   | Read + Notify | 8 bytes: mountain, sessions, streaks  |
+| Command        | `...0003`   | Write         | `0x01` = log activity, `0x02` = reset |
+
+### Progress Payload (8 bytes)
+
+| Byte | Field             |
+| ---- | ----------------- |
+| 0    | Mountain index    |
+| 1    | Sessions done     |
+| 2    | Sessions needed   |
+| 3    | Summits reached   |
+| 4    | Current streak    |
+| 5    | Best streak       |
+| 6-7  | Total sessions    |
 
 ---
 
-## Docs
+## Mountains
 
-| File                              | Contents                              |
-| --------------------------------- | ------------------------------------- |
-| `docs/BLE_protocol.md`            | Full BLE characteristic spec          |
-| `docs/wiring_schematic.md`        | Pin assignments and wiring diagram    |
-| `docs/testing_guide_no_3d.md`     | Full test sequence (needs both boards)|
-| `docs/EEPROM_memory_map.md`       | Persistent storage layout             |
-| `docs/serial_protocol.md`         | Arduino ↔ Circuit Playground serial   |
-| `docs/ios_ble_limitation.md`      | Why iOS is not supported + options    |
+| Index | Name              | Sessions | Unlocks After |
+| ----- | ----------------- | -------- | ------------- |
+| 0     | Colline Locale    | 3        | 0 summits     |
+| 1     | Petit Sommet      | 3        | 1 summit      |
+| 2     | Mont Entrainement | 3        | 2 summits     |
+
+---
+
+## Flash Budget
+
+The Arduino Uno WiFi Rev.2 has 48,640 bytes of flash. ArduinoBLE alone uses ~90%. The firmware compiles at **93%** by using direct PWM servo control instead of the Servo library (saves ~1KB).
+
+---
+
+## Browser Support
+
+Chrome on Android, Windows, macOS, or Linux. iOS does not support Web Bluetooth.

@@ -1,6 +1,12 @@
 # Claude Code
 .claude/
 
+# Serena
+.serena/
+
+# Superpowers skill cache
+docs/superpowers/
+
 # Playwright / test screenshots
 .playwright-mcp/
 
