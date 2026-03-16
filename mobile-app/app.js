@@ -88,15 +88,30 @@ async function connectBLE() {
       filters: [{ services: [SERVICE_UUID] }],
     });
 
-    statusText.textContent = 'Connecting...';
     bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
 
-    const server = await bleDevice.gatt.connect();
-    bleService = await server.getPrimaryService(SERVICE_UUID);
+    // Connect with retry — handles stale GATT cache transparently
+    const MAX_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      statusText.textContent = attempt === 1 ? 'Connecting...' : `Reconnecting (${attempt}/${MAX_RETRIES})...`;
 
-    // Get the 2 characteristics
-    charProgress = await bleService.getCharacteristic(CHAR_PROGRESS_UUID);
-    charCommand  = await bleService.getCharacteristic(CHAR_COMMAND_UUID);
+      try {
+        const server = await bleDevice.gatt.connect();
+        bleService = await server.getPrimaryService(SERVICE_UUID);
+        charProgress = await bleService.getCharacteristic(CHAR_PROGRESS_UUID);
+        charCommand  = await bleService.getCharacteristic(CHAR_COMMAND_UUID);
+        break; // success
+      } catch (charErr) {
+        // If characteristic not found, disconnect and retry (clears GATT cache)
+        if (attempt < MAX_RETRIES) {
+          console.warn(`BLE attempt ${attempt} failed (${charErr.message}), retrying...`);
+          if (bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+          await new Promise(r => setTimeout(r, 1000));
+        } else {
+          throw charErr;
+        }
+      }
+    }
 
     // Subscribe to Progress notifications
     await charProgress.startNotifications();

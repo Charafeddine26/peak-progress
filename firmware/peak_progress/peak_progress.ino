@@ -8,11 +8,26 @@
  *   Progress (0x0001) — 8 bytes, read/notify
  *   Command  (0x0003) — 1 byte, write (0x01=log, 0x02=reset)
  *
+ * Circuit Playground (optional, via SoftwareSerial on D4/D5):
+ *   Wiring: Arduino D4 → CP TX (#1), Arduino D5 → CP RX (#0), GND → GND
+ *   Uncomment #define HAS_CIRCUIT_PLAYGROUND below to enable.
+ *
  * M2 IHM TII — Tangible Interfaces 2026
  */
 
 #include <ArduinoBLE.h>
 #include <EEPROM.h>
+
+// ─── Circuit Playground (uncomment to enable) ───────────────
+#define HAS_CIRCUIT_PLAYGROUND
+
+#ifdef HAS_CIRCUIT_PLAYGROUND
+#include <SoftwareSerial.h>
+#define CP_RX_PIN 4
+#define CP_TX_PIN 5
+SoftwareSerial cpSerial(CP_RX_PIN, CP_TX_PIN);
+#define NUM_LEDS 10
+#endif
 
 // ─── BLE ─────────────────────────────────────────────────────
 #define SERVICE_UUID       "19B10000-E8F2-537E-4F6C-D104768A1214"
@@ -112,6 +127,67 @@ void updateBLE() {
   progressChar.writeValue(data, 8);
 }
 
+// ─── Circuit Playground Commands ─────────────────────────────
+
+#ifdef HAS_CIRCUIT_PLAYGROUND
+void cpClearLEDs() { cpSerial.println('C'); }
+
+void cpSetLED(uint8_t idx, uint32_t color) {
+  cpSerial.print('L');
+  cpSerial.print(idx);
+  cpSerial.print(':');
+  // Pad hex color to 6 digits
+  for (uint32_t mask = 0x100000; mask > 0; mask >>= 4) {
+    if (color < mask) cpSerial.print('0');
+  }
+  cpSerial.println(color, HEX);
+}
+
+void cpSendProgress() {
+  int lit = SESSIONS_PER > 0
+    ? constrain(((int)p.sessions * NUM_LEDS) / SESSIONS_PER, 0, NUM_LEDS)
+    : 0;
+  cpClearLEDs();
+  delay(50);
+  for (int i = 0; i < lit; i++) {
+    cpSetLED(i, 0x00D2FF);  // tier 1 color
+    delay(20);
+  }
+}
+
+void cpSummitAnimation(uint8_t tier) {
+  cpSerial.print('S');
+  cpSerial.println(tier);
+}
+
+void cpPlayMelody(uint8_t type) {
+  cpSerial.print('M');
+  cpSerial.println(type);
+}
+
+void cpPlayTone(uint16_t freq, uint16_t dur) {
+  cpSerial.print('T');
+  cpSerial.print(freq);
+  cpSerial.print(':');
+  cpSerial.println(dur);
+}
+
+void cpWeeklyAnimation() {
+  cpSerial.println('W');
+}
+
+bool cpTouchDetected() {
+  if (cpSerial.available()) {
+    char c = cpSerial.read();
+    if (c == 'T') {
+      while (cpSerial.available()) cpSerial.read();
+      return true;
+    }
+  }
+  return false;
+}
+#endif
+
 // ─── Core Logic ──────────────────────────────────────────────
 
 uint8_t nextMtn() {
@@ -131,13 +207,27 @@ void logActivity() {
   moveServo(targetAngle());
   save();
 
+#ifdef HAS_CIRCUIT_PLAYGROUND
+  cpSendProgress();
+  cpPlayTone(880, 100);  // quick confirmation beep
+
+  // Weekly streak milestone
+  if (p.streak == 7) cpWeeklyAnimation();
+#endif
+
   if (p.sessions >= SESSIONS_PER) {
     delay(3000);
     p.summits++;
+#ifdef HAS_CIRCUIT_PLAYGROUND
+    cpSummitAnimation(1);
+#endif
     p.mtn = nextMtn();
     p.sessions = 0;
     save();
     moveServo(SERVO_MIN);
+#ifdef HAS_CIRCUIT_PLAYGROUND
+    cpClearLEDs();
+#endif
   }
 
   updateBLE();
@@ -147,15 +237,26 @@ void resetProgress() {
   p = {0, 0, 0, 0, 0, 0};
   save();
   moveServo(SERVO_MIN);
+#ifdef HAS_CIRCUIT_PLAYGROUND
+  cpClearLEDs();
+#endif
   updateBLE();
 }
 
 // ─── Setup & Loop ────────────────────────────────────────────
 
 void setup() {
+#ifdef HAS_CIRCUIT_PLAYGROUND
+  cpSerial.begin(9600);
+#endif
+
   load();
   angle = targetAngle();
   moveServo(angle);
+
+#ifdef HAS_CIRCUIT_PLAYGROUND
+  cpSendProgress();
+#endif
 
   if (!BLE.begin()) while (1);
 
@@ -170,6 +271,10 @@ void setup() {
 }
 
 void loop() {
+#ifdef HAS_CIRCUIT_PLAYGROUND
+  if (cpTouchDetected()) logActivity();
+#endif
+
   BLEDevice central = BLE.central();
   if (central && central.connected()) {
     if (commandChar.written()) {
