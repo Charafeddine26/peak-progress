@@ -140,21 +140,26 @@ async function connectBLE() {
     const server = await bleDevice.gatt.connect();
     bleService = await server.getPrimaryService(SERVICE_UUID);
 
-    // Get characteristics
+    // Get characteristics (progress + command are required, others optional)
     charProgress = await bleService.getCharacteristic(CHAR_PROGRESS_UUID);
-    charMountain = await bleService.getCharacteristic(CHAR_MOUNTAIN_UUID);
     charCommand  = await bleService.getCharacteristic(CHAR_COMMAND_UUID);
-    charUnlock   = await bleService.getCharacteristic(CHAR_UNLOCK_UUID);
+
+    try { charMountain = await bleService.getCharacteristic(CHAR_MOUNTAIN_UUID); } catch (e) { charMountain = null; }
+    try { charUnlock   = await bleService.getCharacteristic(CHAR_UNLOCK_UUID); }   catch (e) { charUnlock = null; }
 
     // Subscribe to notifications
     await charProgress.startNotifications();
     charProgress.addEventListener('characteristicvaluechanged', onProgressChanged);
 
-    await charMountain.startNotifications();
-    charMountain.addEventListener('characteristicvaluechanged', onMountainChanged);
+    if (charMountain) {
+      await charMountain.startNotifications();
+      charMountain.addEventListener('characteristicvaluechanged', onMountainChanged);
+    }
 
-    await charUnlock.startNotifications();
-    charUnlock.addEventListener('characteristicvaluechanged', onUnlockChanged);
+    if (charUnlock) {
+      await charUnlock.startNotifications();
+      charUnlock.addEventListener('characteristicvaluechanged', onUnlockChanged);
+    }
 
     // Initial read
     await readAllCharacteristics();
@@ -188,17 +193,25 @@ function onDisconnected() {
 
 async function readAllCharacteristics() {
   try {
-    // Read Progress
+    // Read Progress (always available)
     const progVal = await charProgress.readValue();
     parseProgress(progVal);
 
-    // Read Mountain name
-    const mtnVal = await charMountain.readValue();
-    parseMountainName(mtnVal);
+    // Read Mountain name (optional — derive from progress if missing)
+    if (charMountain) {
+      const mtnVal = await charMountain.readValue();
+      parseMountainName(mtnVal);
+    } else {
+      state.mountainName = (MOUNTAINS[state.mountainIndex] || MOUNTAINS[0]).name;
+    }
 
-    // Read Unlock bitfield
-    const unlockVal = await charUnlock.readValue();
-    parseUnlock(unlockVal);
+    // Read Unlock bitfield (optional — derive from summits if missing)
+    if (charUnlock) {
+      const unlockVal = await charUnlock.readValue();
+      parseUnlock(unlockVal);
+    } else {
+      deriveUnlockedFromProgress();
+    }
 
     updateAllUI();
   } catch (err) {
@@ -210,6 +223,13 @@ async function readAllCharacteristics() {
 
 function onProgressChanged(event) {
   parseProgress(event.target.value);
+  // Derive missing data if firmware doesn't provide those characteristics
+  if (!charMountain) {
+    state.mountainName = (MOUNTAINS[state.mountainIndex] || MOUNTAINS[0]).name;
+  }
+  if (!charUnlock) {
+    deriveUnlockedFromProgress();
+  }
   updateAllUI();
 }
 
@@ -244,6 +264,16 @@ function parseMountainName(dataView) {
 
 function parseUnlock(dataView) {
   state.unlockedBitfield = dataView.getUint8(0) | (dataView.getUint8(1) << 8);
+}
+
+function deriveUnlockedFromProgress() {
+  let bitfield = 0;
+  for (let i = 0; i < MOUNTAINS.length; i++) {
+    if (state.summits >= MOUNTAINS[i].unlockAfter) {
+      bitfield |= (1 << i);
+    }
+  }
+  state.unlockedBitfield = bitfield;
 }
 
 // ─── BLE Write Commands ─────────────────────────────
