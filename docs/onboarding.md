@@ -8,94 +8,177 @@ Bienvenue dans l'équipe ! Ce document t'explique comment fonctionne **Peak Prog
 
 ### Le concept
 
-Peak Progress est un **objet tangible** qui transforme une habitude quotidienne (méditation, sport, lecture…) en escalade de montagne. Chaque fois que tu touches l'objet, un petit grimpeur monte physiquement le long d'une montagne imprimée en 3D. Quand tu atteins le sommet, une nouvelle montagne plus difficile se débloque.
+Peak Progress est un **objet tangible** qui transforme une habitude quotidienne (méditation, sport, lecture…) en escalade de montagne. Chaque fois que tu enregistres une activité via l'app web, un petit grimpeur monte physiquement le long d'une montagne imprimée en 3D. Quand tu atteins le sommet, une nouvelle montagne plus difficile se débloque.
 
 ### L'objet physique
 
-L'objet se compose de trois éléments :
+L'objet se compose de :
 
 1. **La montagne 3D** — une forme imprimée en 3D avec un rail le long duquel un petit personnage (le grimpeur) se déplace grâce à un fil et une poulie
 2. **Le servo-moteur** — un petit moteur qui tire le fil pour faire monter ou descendre le grimpeur
-3. **Le socle** — contient l'électronique : l'Arduino, le Circuit Playground, les câbles
+3. **Le socle** — contient l'Arduino et les câbles
 
 ### L'expérience utilisateur
 
 ```
-Toucher le pad → Le grimpeur monte un peu → Les LEDs s'allument → Atteindre le sommet → Nouvelle montagne !
+Appuyer dans l'app web → L'Arduino reçoit via Bluetooth → Le grimpeur monte → Sommet atteint → Nouvelle montagne !
 ```
 
-### Les 3 composants du système
+### Les 2 composants du système
 
-| Composant | Rôle | Carte |
-|-----------|------|-------|
-| **Circuit Playground** | Capteur tactile + LEDs + buzzer | Adafruit Circuit Playground |
+| Composant | Rôle | Technologie |
+|-----------|------|-------------|
 | **Arduino** | Cerveau : logique, mémoire, servo, Bluetooth | Arduino Uno WiFi Rev.2 |
-| **Web App** | Dashboard sur téléphone via Bluetooth | Page web (HTML/JS) |
+| **Web App** | Interface utilisateur : dashboard + commandes | Page web (HTML/JS) via Web Bluetooth |
 
 ### Schéma des connexions
 
 ```
-┌─────────────────────┐          câble série          ┌──────────────────────┐
-│  Circuit Playground │ ◄──────────────────────────► │      Arduino         │
-│                     │   (TX/RX, 9600 baud)          │   Uno WiFi Rev.2     │
-│  • Pad capacitif    │                               │                      │
-│  • 10 LEDs NeoPixel │                               │  • Servo-moteur      │
-│  • Buzzer           │                               │  • EEPROM (mémoire)  │
-└─────────────────────┘                               │  • BLE (Bluetooth)   │
-                                                      └──────────┬───────────┘
-                                                                 │ Bluetooth
-                                                                 ▼
-                                                      ┌──────────────────────┐
-                                                      │     Web App          │
-                                                      │  (téléphone/PC)      │
-                                                      │  • Dashboard         │
-                                                      │  • Historique        │
-                                                      └──────────────────────┘
+┌──────────────────────────────────┐
+│          ARDUINO                 │
+│       Uno WiFi Rev.2             │
+│                                  │
+│  • Servo-moteur (grimpeur)       │
+│  • EEPROM (mémoire permanente)   │
+│  • BLE (Bluetooth Low Energy)    │
+└───────────┬──────────────────────┘
+            │ Bluetooth (BLE)
+            │ bidirectionnel
+            ▼
+┌──────────────────────────────────┐
+│          WEB APP                 │
+│  (téléphone ou PC)               │
+│                                  │
+│  • Bouton "Log Activity"         │
+│  • Dashboard en temps réel       │
+│  • Liste des montagnes           │
+└──────────────────────────────────┘
 ```
 
 ---
 
-## 2. Le Parcours d'une Touche
+## 2. Le Parcours d'une Activité
 
-C'est le fil rouge de ce document. On va suivre ce qui se passe quand l'utilisateur **touche le pad**, étape par étape, fichier par fichier.
+C'est le fil rouge de ce document. On va suivre ce qui se passe quand l'utilisateur **appuie sur "Log Activity"** dans l'app web, étape par étape, fichier par fichier.
 
 ---
 
-### Étape 1 — Le toucher (détection capacitive)
+### Étape 1 — L'action utilisateur
 
-**Fichier : `circuit_playground.ino`**
+**L'app web (navigateur)**
 
-Quand tu poses ton doigt sur le pad n°3 du Circuit Playground, le capteur mesure la capacitance (une propriété électrique qui change au contact de la peau). Si la valeur dépasse un seuil, c'est un toucher valide.
+L'utilisateur ouvre la page web sur son téléphone (Chrome/Android) ou son PC. Il appuie sur le bouton « Log Activity ». L'app envoie alors une commande via Bluetooth à l'Arduino.
+
+Côté web, c'est du JavaScript — pas besoin de comprendre le code. Ce qu'il faut retenir : l'app envoie l'octet `0x01` (le code pour « enregistrer une activité ») dans la `characteristic` de commande BLE.
+
+---
+
+### Étape 2 — La réception BLE (Bluetooth)
+
+**Fichier : `ble_service.h`**
+
+L'Arduino reçoit la commande Bluetooth. Le `BLE` (Bluetooth Low Energy) fonctionne avec un système de « boîtes à lettres » numériques appelées `characteristic`. L'app web écrit dans la boîte de commande, et l'Arduino la lit.
 
 ```cpp
-// ── Configuration ──
-#define TOUCH_PAD        3       // Numéro du pad capacitif utilisé
-#define TOUCH_THRESHOLD  500     // Seuil : au-dessus = toucher détecté
-#define DEBOUNCE_MS      1500    // Anti-rebond : ignore les touches trop rapides (1.5s)
+#include <ArduinoBLE.h>
 
-// ── Fonction principale au démarrage ──
+// ── Identifiants uniques du service BLE ──
+#define SERVICE_UUID       "19B10000-E8F2-537E-4F6C-D104768A1214"
+#define CHAR_PROGRESS_UUID "19B10001-E8F2-537E-4F6C-D104768A1214"  // Données → téléphone
+#define CHAR_COMMAND_UUID  "19B10003-E8F2-537E-4F6C-D104768A1214"  // Commandes ← téléphone
+
+// ── Codes de commande ──
+#define CMD_LOG_ACTIVITY   0x01   // "Enregistrer une activité"
+#define CMD_RESET          0x02   // "Réinitialiser la progression"
+
+// ── Les objets BLE ──
+BLEService peakService(SERVICE_UUID);
+BLECharacteristic progressChar(CHAR_PROGRESS_UUID, BLERead | BLENotify, 8); // Lecture + notification
+BLEByteCharacteristic commandChar(CHAR_COMMAND_UUID, BLEWrite);              // Écriture
+
+// ── Initialisation : rendre l'Arduino visible en Bluetooth ──
+inline bool initBLE() {
+  if (!BLE.begin()) return false;            // Démarrer le Bluetooth
+
+  BLE.setLocalName("PeakProgress");          // Nom visible par le téléphone
+  BLE.setAdvertisedService(peakService);
+
+  peakService.addCharacteristic(progressChar);
+  peakService.addCharacteristic(commandChar);
+
+  BLE.addService(peakService);
+  BLE.advertise();                           // Commencer à se rendre visible
+  return true;
+}
+```
+
+> **C++ : c'est quoi le `BLE` ?**
+>
+> `BLE` = Bluetooth Low Energy. C'est une version économe en énergie du Bluetooth, idéale pour les objets connectés. Le fonctionnement :
+>
+> 1. L'Arduino **annonce** sa présence (comme un phare)
+> 2. Le téléphone **se connecte** au service « PeakProgress »
+> 3. Le téléphone **écrit** dans la boîte de commande pour déclencher une action
+> 4. L'Arduino **publie** ses données dans la boîte de progression, et le téléphone les lit
+>
+> Les `UUID` sont des identifiants uniques (comme des numéros de téléphone) pour chaque boîte.
+
+> **C++ : c'est quoi `#include` et les fichiers `.h` ?**
+>
+> Imagine un livre de recettes divisé en chapitres. `#include "progress.h"` revient à dire « ouvre le chapitre *progress* et lis-le ici ». Les fichiers `.h` (header) contiennent du code réutilisable. Ça évite de tout mettre dans un seul fichier énorme.
+>
+> `#include <ArduinoBLE.h>` avec des `< >` inclut une bibliothèque externe (fournie par le système).
+> `#include "progress.h"` avec des `" "` inclut un fichier de notre projet.
+
+---
+
+### Étape 3 — La boucle principale et le traitement des commandes
+
+**Fichier : `arduino_main.ino`**
+
+L'Arduino tourne en boucle infinie. À chaque tour, il vérifie si une commande BLE est arrivée. Si oui, il l'exécute.
+
+```cpp
+#include "mountains.h"
+#include "progress.h"
+#include "servo_control.h"
+#include "ble_service.h"
+
+UserProgress userProgress;   // La fiche de progression de l'utilisateur
+
+// ── Fonction de démarrage (une seule fois) ──
 void setup() {
-  CircuitPlayground.begin();         // Initialise le Circuit Playground
-  Serial.begin(9600);               // Ouvre la communication série
-  CircuitPlayground.setBrightness(30); // Luminosité des LEDs
+  loadProgress(userProgress);                  // Charger la sauvegarde
+  checkAndUnlockMountains(userProgress);       // Vérifier les montagnes débloquées
+
+  initServo();                                 // Initialiser le servo
+  positionClimberForCurrentProgress(userProgress);  // Placer le grimpeur
+
+  if (initBLE()) {                             // Démarrer le Bluetooth
+    updateAllBLE(userProgress);                // Publier les données
+  }
 }
 
-// ── Boucle infinie (tourne en permanence) ──
+// ── Boucle infinie ──
 void loop() {
-  handleTouch();               // Vérifie si on touche le pad
-  processSerialCommands();     // Écoute les ordres de l'Arduino
+  uint8_t bleCmd = checkBLECommand();          // Vérifier si commande reçue
+
+  if (bleCmd != 0x00) {
+    handleBLECommand(bleCmd);                  // Exécuter la commande
+  }
 }
 
-// ── Détection du toucher ──
-void handleTouch() {
-  uint16_t capValue = CircuitPlayground.readCap(TOUCH_PAD);  // Lit la capacitance
-
-  if (capValue > TOUCH_THRESHOLD) {                          // Seuil dépassé ?
-    unsigned long now = millis();                             // Temps actuel en ms
-    if (now - lastTouchTime >= DEBOUNCE_MS) {                // Assez de temps écoulé ?
-      lastTouchTime = now;
-      Serial.println('T');     // Envoie "T" à l'Arduino = "Toucher détecté !"
-    }
+// ── Traitement des commandes BLE ──
+void handleBLECommand(uint8_t cmd) {
+  switch (cmd) {
+    case CMD_LOG_ACTIVITY:                     // 0x01 → enregistrer activité
+      logActivity();
+      break;
+    case CMD_RESET:                            // 0x02 → réinitialiser
+      resetProgress(userProgress);
+      descendToBase();
+      updateAllBLE(userProgress);
+      break;
   }
 }
 ```
@@ -111,78 +194,22 @@ void handleTouch() {
 > **C++ : c'est quoi une variable ?**
 >
 > Une variable, c'est une boîte avec une étiquette. Par exemple :
-> - `#define TOUCH_THRESHOLD 500` crée une constante nommée `TOUCH_THRESHOLD` qui vaut 500
-> - `uint16_t capValue` crée une boîte nommée `capValue` qui stocke un nombre entier positif (de 0 à 65 535)
+> - `uint8_t bleCmd` crée une boîte nommée `bleCmd` qui stocke un nombre de 0 à 255
+> - `UserProgress userProgress` crée une fiche de progression (voir étape 4)
 >
 > Les types courants dans notre code :
 > - `int` — nombre entier classique
 > - `uint8_t` — nombre positif de 0 à 255 (1 octet)
 > - `uint16_t` — nombre positif de 0 à 65 535 (2 octets)
 > - `bool` — vrai (`true`) ou faux (`false`)
-> - `unsigned long` — très grand nombre positif (pour le temps en millisecondes)
 
 ---
 
-### Étape 2 — La communication série
-
-**Fichier : `serial_protocol.h`**
-
-Le Circuit Playground envoie la lettre `T` suivie d'un retour à la ligne via un câble physique (TX/RX). L'Arduino écoute et réagit.
-
-```cpp
-#ifndef SERIAL_PROTOCOL_H    // Protection : n'inclure ce fichier qu'une seule fois
-#define SERIAL_PROTOCOL_H
-
-#include <Arduino.h>          // Inclut les fonctions de base Arduino
-#include "mountains.h"        // Inclut notre fichier de définition des montagnes
-#include "progress.h"         // Inclut notre fichier de progression
-
-// ── L'Arduino vérifie si le CP a envoyé un "T" ──
-inline bool serialTouchDetected() {
-  if (Serial.available()) {          // Y a-t-il des données à lire ?
-    char c = Serial.read();          // Lire un caractère
-    if (c == 'T') {                  // C'est un toucher ?
-      while (Serial.available()) Serial.read();  // Vider le reste
-      return true;                   // Oui, toucher détecté !
-    }
-  }
-  return false;                      // Non, rien reçu
-}
-
-// ── L'Arduino envoie des ordres au CP ──
-inline void sendMelodyCommand(MelodyType melody) {
-  Serial.print('M');                 // Lettre de commande
-  Serial.println((int)melody);      // Numéro de mélodie (0 à 4)
-}
-
-inline void sendSummitAnimation(uint8_t tier) {
-  Serial.print('S');                 // "S" pour summit
-  Serial.println(tier);             // Tier de la montagne (1 à 4)
-}
-```
-
-> **C++ : c'est quoi `#include` et les fichiers `.h` ?**
->
-> Imagine un livre de recettes divisé en chapitres. `#include "progress.h"` revient à dire « ouvre le chapitre *progress* et lis-le ici ». Les fichiers `.h` (header) contiennent du code réutilisable. Ça évite de tout mettre dans un seul fichier énorme.
->
-> `#include <Arduino.h>` avec des `< >` inclut un fichier de la bibliothèque Arduino (fourni par le système).
-> `#include "progress.h"` avec des `" "` inclut un fichier de notre projet.
-
-> **C++ : c'est quoi `Serial` ?**
->
-> `Serial` est le moyen de communication entre deux cartes via un câble. C'est comme un talkie-walkie textuel :
-> - `Serial.print('M')` — envoie la lettre M
-> - `Serial.println(42)` — envoie le nombre 42 suivi d'un retour à la ligne
-> - `Serial.read()` — lit un caractère reçu
-> - `Serial.available()` — vérifie s'il y a quelque chose à lire
-
----
-
-### Étape 3 — La logique de progression
+### Étape 4 — La logique de progression
 
 **Fichier : `progress.h` + `arduino_main.ino`**
 
-Quand l'Arduino reçoit le `T`, il appelle la fonction `logActivity()`. C'est là que la magie opère : on incrémente les compteurs, on bouge le grimpeur, et on vérifie si le sommet est atteint.
+Quand l'Arduino reçoit la commande `CMD_LOG_ACTIVITY`, il appelle `logActivity()`. C'est là que la magie opère : on incrémente les compteurs, on bouge le grimpeur, et on vérifie si le sommet est atteint.
 
 ```cpp
 // ── La structure qui stocke toute la progression de l'utilisateur ──
@@ -198,7 +225,7 @@ struct UserProgress {
 ```
 
 ```cpp
-// ── dans arduino_main.ino — la fonction appelée à chaque toucher ──
+// ── dans arduino_main.ino — la fonction appelée à chaque activité ──
 void logActivity() {
   const Mountain &mtn = MOUNTAIN_LIBRARY[userProgress.currentMountainIndex];
   uint8_t totalSess = SESSIONS_FOR_MOUNTAIN(mtn);
@@ -223,6 +250,8 @@ void logActivity() {
   if (userProgress.sessionsOnCurrentMountain >= totalSess) {
     summitReached();             // Célébration !
   }
+
+  updateAllBLE(userProgress);   // Mettre à jour le Bluetooth
 }
 ```
 
@@ -244,7 +273,7 @@ void logActivity() {
 
 > **C++ : c'est quoi une fonction ?**
 >
-> Une fonction, c'est une **recette réutilisable**. `logActivity()` est une recette qui dit « voici les 10 étapes à faire quand quelqu'un touche le pad ». On peut l'appeler depuis n'importe où avec juste son nom : `logActivity();`
+> Une fonction, c'est une **recette réutilisable**. `logActivity()` est une recette qui dit « voici les étapes à faire quand quelqu'un enregistre une activité ». On peut l'appeler depuis n'importe où avec juste son nom : `logActivity();`
 >
 > Une fonction peut aussi prendre des **paramètres** (ingrédients) :
 > ```cpp
@@ -255,7 +284,7 @@ void logActivity() {
 
 ---
 
-### Étape 4 — La sauvegarde EEPROM
+### Étape 5 — La sauvegarde EEPROM
 
 **Fichier : `progress.h`**
 
@@ -307,11 +336,11 @@ inline void initProgressDefaults(UserProgress &prog) {
 > - `uint8_t` = nombre positif sur **8 bits** (1 octet) → de 0 à 255
 > - `uint16_t` = nombre positif sur **16 bits** (2 octets) → de 0 à 65 535
 >
-> Sur Arduino, la mémoire est très limitée. Utiliser le type le plus petit possible permet d'économiser de la place. `totalSessionsAllTime` utilise `uint16_t` parce qu'on pourrait dépasser 255 sessions au total, mais `currentMountainIndex` utilise `uint8_t` car il n'y a que 9 montagnes.
+> Sur Arduino, la mémoire est très limitée. Utiliser le type le plus petit possible permet d'économiser de la place. `totalSessionsAllTime` utilise `uint16_t` parce qu'on pourrait dépasser 255 sessions, mais `currentMountainIndex` utilise `uint8_t` car il n'y a que 9 montagnes.
 
 ---
 
-### Étape 5 — Le mouvement du servo
+### Étape 6 — Le mouvement du servo
 
 **Fichier : `servo_control.h`**
 
@@ -355,107 +384,68 @@ inline void moveClimberSmooth(int targetAngle) {
 }
 ```
 
-> **C++ : fonctions avec paramètres et `map()`**
+> **C++ : fonctions avec paramètres**
 >
-> `calculateServoAngle(sessions, totalSessions)` est une fonction qui prend deux ingrédients et renvoie un résultat (l'angle). C'est comme une formule mathématique :
+> `calculateServoAngle(sessions, totalSessions)` prend deux ingrédients et renvoie un résultat (l'angle). C'est comme une formule :
 >
 > ```
 > angle = base + (plage × sessions) / sessionsTotal
 > ```
 >
-> La fonction `constrain(valeur, min, max)` empêche une valeur de sortir d'un intervalle. Si `targetAngle` vaut 200, `constrain` le ramène à 170 (le maximum).
+> `constrain(valeur, min, max)` empêche une valeur de sortir d'un intervalle. Si `targetAngle` vaut 200, `constrain` le ramène à 170 (le maximum).
 
 ---
 
-### Étape 6 — Le retour visuel (LEDs et mélodies)
+### Étape 7 — La vérification du sommet
 
-**Fichiers : `serial_protocol.h` + `circuit_playground.ino`**
+**Fichier : `arduino_main.ino`**
 
-Après chaque toucher, l'Arduino envoie des commandes au Circuit Playground pour allumer les LEDs et jouer des sons. Le nombre de LEDs allumées reflète la progression sur la montagne actuelle.
-
-**Côté Arduino — envoi des commandes :**
+Si l'utilisateur a fait assez de sessions, il atteint le sommet ! La fonction `summitReached()` débloque la prochaine montagne et redescend le grimpeur au camp de base.
 
 ```cpp
-// ── Allumer les LEDs selon la progression ──
-inline void sendProgressLEDs(const UserProgress &prog, const Mountain &mtn) {
-  uint8_t totalSess = SESSIONS_FOR_MOUNTAIN(mtn);
+void summitReached() {
+  const Mountain &mtn = MOUNTAIN_LIBRARY[userProgress.currentMountainIndex];
 
-  // Calculer combien de LEDs allumer (sur 10)
-  int ledsToLight = ((int)prog.sessionsOnCurrentMountain * NUM_LEDS) / totalSess;
-  ledsToLight = constrain(ledsToLight, 0, NUM_LEDS);
+  delay(3000);   // Pause de célébration
 
-  sendClearLEDs();   // D'abord tout éteindre
+  userProgress.summitsReached++;             // +1 sommet
+  checkAndUnlockMountains(userProgress);     // Débloquer les nouvelles montagnes
 
-  for (int i = 0; i < ledsToLight; i++) {
-    uint32_t color = getMountainColor(mtn, i);  // Couleur de la palette
-    sendLEDCommand(i, color);                    // Allumer la LED i
+  uint8_t nextIdx = findNextMountain(userProgress);  // Trouver la prochaine
+
+  userProgress.currentMountainIndex = nextIdx;       // Changer de montagne
+  userProgress.sessionsOnCurrentMountain = 0;        // Remettre le compteur à zéro
+
+  saveProgress(userProgress);   // Sauvegarder
+  descendToBase();              // Redescendre le grimpeur au camp de base
+
+  updateAllBLE(userProgress);   // Informer l'app web
+}
+```
+
+```cpp
+// ── Débloquer les montagnes gagnées ──
+inline void checkAndUnlockMountains(UserProgress &prog) {
+  for (uint8_t i = 0; i < NUM_MOUNTAINS; i++) {
+    if (prog.summitsReached >= MOUNTAIN_LIBRARY[i].unlockAfterSummits) {
+      unlockMountain(prog, i);   // Activer le bit correspondant
+    }
   }
 }
 ```
 
-**Côté Circuit Playground — réception et exécution :**
-
-```cpp
-// ── Écouter les commandes série ──
-void processSerialCommands() {
-  if (!Serial.available()) return;
-
-  char cmd = Serial.read();         // Lire la première lettre
-
-  switch (cmd) {
-    case 'L': parseLEDCommand(); break;    // "L" = allumer une LED
-    case 'C': clearAllLEDs(); break;       // "C" = tout éteindre
-    case 'M': parseMelodyCommand(); break; // "M" = jouer une mélodie
-    case 'W': weeklyAnimation(); break;    // "W" = animation hebdomadaire
-    case 'S': parseSummitCommand(); break; // "S" = célébration sommet
-  }
-}
-```
-
-> **C++ : protocole texte et `parsing`**
->
-> Les deux cartes communiquent avec un **protocole** simple : des lettres suivies de données. Par exemple :
-> - `L3:00FF99` = « LED numéro 3, couleur vert clair »
-> - `M2` = « joue la mélodie numéro 2 (triumphante) »
-> - `S4` = « animation de sommet, tier 4 »
->
-> Le `parsing`, c'est l'action de **décoder** ces messages. Le `switch` est comme un aiguillage de train : selon la première lettre reçue, le programme prend un chemin différent.
-
 ---
 
-### Étape 7 — La notification BLE (Bluetooth)
+### Étape 8 — La notification BLE (retour vers l'app web)
 
 **Fichier : `ble_service.h`**
 
-L'Arduino envoie la progression au téléphone via `BLE` (Bluetooth Low Energy). L'app web peut ainsi afficher le dashboard en temps réel sans fil.
+Après chaque action, l'Arduino met à jour ses données BLE. L'app web reçoit automatiquement la notification et rafraîchit le dashboard.
 
 ```cpp
-#define SERVICE_UUID       "19B10000-E8F2-537E-4F6C-D104768A1214"  // Identifiant du service
-#define CHAR_PROGRESS_UUID "19B10001-E8F2-537E-4F6C-D104768A1214"  // Identifiant des données
-#define CHAR_COMMAND_UUID  "19B10003-E8F2-537E-4F6C-D104768A1214"  // Identifiant des commandes
-
-// ── Objets BLE ──
-BLEService peakService(SERVICE_UUID);                                    // Le service
-BLECharacteristic progressChar(CHAR_PROGRESS_UUID, BLERead | BLENotify, 8); // Données (lecture + notification)
-BLEByteCharacteristic commandChar(CHAR_COMMAND_UUID, BLEWrite);          // Commandes (écriture)
-
-// ── Initialisation BLE ──
-inline bool initBLE() {
-  if (!BLE.begin()) return false;       // Démarrer le Bluetooth
-
-  BLE.setLocalName("PeakProgress");     // Nom visible par le téléphone
-  BLE.setAdvertisedService(peakService);
-
-  peakService.addCharacteristic(progressChar);  // Ajouter les caractéristiques
-  peakService.addCharacteristic(commandChar);
-
-  BLE.addService(peakService);
-  BLE.advertise();   // Commencer à se rendre visible
-  return true;
-}
-
-// ── Envoyer la progression au téléphone ──
 inline void updateBLEProgress(const UserProgress &prog) {
+  const Mountain &mtn = MOUNTAIN_LIBRARY[prog.currentMountainIndex];
+
   uint8_t data[8] = {
     prog.currentMountainIndex,           // Octet 0 : quelle montagne
     prog.sessionsOnCurrentMountain,      // Octet 1 : sessions faites
@@ -471,16 +461,14 @@ inline void updateBLEProgress(const UserProgress &prog) {
 }
 ```
 
-> **C++ : c'est quoi le `BLE` ?**
+> **C++ : `BLE` `characteristic` et `notify`**
 >
-> `BLE` = Bluetooth Low Energy. C'est une version économe en énergie du Bluetooth, idéale pour les objets connectés. Le fonctionnement :
+> Une `characteristic` BLE est une boîte à lettres numérique :
+> - `BLERead` — le téléphone peut lire la boîte
+> - `BLENotify` — le téléphone est prévenu automatiquement quand le contenu change
+> - `BLEWrite` — le téléphone peut écrire dans la boîte (pour envoyer des commandes)
 >
-> 1. L'Arduino **annonce** sa présence (comme un phare)
-> 2. Le téléphone **se connecte** au service `PeakProgress`
-> 3. L'Arduino **publie** ses données dans des `characteristic` (des boîtes à lettres numériques)
-> 4. Le téléphone **lit** ces boîtes ou reçoit des **notifications** automatiques quand elles changent
->
-> Les `UUID` sont des identifiants uniques (comme des numéros de téléphone) qui permettent au téléphone de trouver le bon service et les bonnes données.
+> Ici, `progressChar` a `BLERead | BLENotify` : le téléphone peut lire les données ET reçoit une notification à chaque mise à jour. C'est ce qui permet au dashboard de se rafraîchir en temps réel.
 
 > **C++ : c'est quoi un `bitfield` et les opérations bit à bit ?**
 >
@@ -501,38 +489,21 @@ inline void updateBLEProgress(const UserProgress &prog) {
 
 ---
 
-### Étape 8 — L'affichage web
-
-**Web App (`mobile-app/`)**
-
-L'app web est une **page web** (pas une app native) qui se connecte à l'Arduino via Web Bluetooth directement depuis le navigateur. Elle affiche en temps réel la progression du grimpeur.
-
-L'app web :
-- Se connecte en Bluetooth à « PeakProgress »
-- Lit les 8 octets de la `characteristic` de progression
-- Met à jour le dashboard : montagne actuelle, sessions, streak, sommets
-- Permet d'envoyer des commandes (log activité, reset) via la `characteristic` de commande
-- Fonctionne aussi en **mode démo** sans Arduino pour tester l'interface
-
-L'app est purement descriptive ici — pas besoin de comprendre le code JavaScript.
-
----
-
 ## 4. Le Système de Montagnes
 
 ### Tableau des 9 montagnes (4 tiers)
 
-| # | Nom | Tier | Sessions | Semaines | Débloquée après | Palette LED | Mélodie |
-|---|-----|------|----------|----------|-----------------|-------------|---------|
-| 0 | Colline Locale | 1 | 7 | 1 | — (départ) | Bleu → Vert | Simple |
-| 1 | Petit Sommet | 1 | 7 | 1 | 1 sommet | Bleu → Cyan → Vert | Simple |
-| 2 | Mont d'Entraînement | 1 | 7 | 1 | 2 sommets | Violet → Or | Modérée |
-| 3 | Mont Blanc | 2 | 14 | 2 | 3 sommets | Glace → Blanc → Or | Triomphante |
-| 4 | Matterhorn | 2 | 14 | 2 | 4 sommets | Violet foncé → Rouge | Triomphante |
-| 5 | Kilimanjaro | 3 | 21 | 3 | 5 sommets | Dégradé chaud | Épique |
-| 6 | Denali | 3 | 21 | 3 | 6 sommets | Arctique scintillant | Épique |
-| 7 | Everest | 4 | 28 | 4 | 7 sommets | Arc-en-ciel | Légendaire |
-| 8 | K2 | 4 | 28 | 4 | 8 sommets | Feu pulsé | Légendaire |
+| # | Nom | Tier | Sessions | Semaines | Débloquée après |
+|---|-----|------|----------|----------|-----------------|
+| 0 | Colline Locale | 1 | 7 | 1 | — (départ) |
+| 1 | Petit Sommet | 1 | 7 | 1 | 1 sommet |
+| 2 | Mont d'Entraînement | 1 | 7 | 1 | 2 sommets |
+| 3 | Mont Blanc | 2 | 14 | 2 | 3 sommets |
+| 4 | Matterhorn | 2 | 14 | 2 | 4 sommets |
+| 5 | Kilimanjaro | 3 | 21 | 3 | 5 sommets |
+| 6 | Denali | 3 | 21 | 3 | 6 sommets |
+| 7 | Everest | 4 | 28 | 4 | 7 sommets |
+| 8 | K2 | 4 | 28 | 4 | 8 sommets |
 
 ### Sessions par tier
 
@@ -543,29 +514,9 @@ L'app est purement descriptive ici — pas besoin de comprendre le code JavaScri
 
 ### Logique de déverrouillage
 
-Le champ `unlockedBitfield` est un nombre de 16 bits. Chaque bit correspond à une montagne. Quand l'utilisateur atteint un sommet, la fonction `checkAndUnlockMountains()` vérifie pour chaque montagne si le nombre de sommets atteints suffit pour la débloquer :
-
-```cpp
-inline void checkAndUnlockMountains(UserProgress &prog) {
-  for (uint8_t i = 0; i < NUM_MOUNTAINS; i++) {
-    if (prog.summitsReached >= MOUNTAIN_LIBRARY[i].unlockAfterSummits) {
-      unlockMountain(prog, i);   // Activer le bit correspondant
-    }
-  }
-}
-```
+Le champ `unlockedBitfield` est un nombre de 16 bits. Chaque bit correspond à une montagne. Quand l'utilisateur atteint un sommet, la fonction `checkAndUnlockMountains()` vérifie pour chaque montagne si le nombre de sommets atteints suffit pour la débloquer.
 
 Exemple : après avoir gravi la Colline Locale (1 sommet), le Petit Sommet (qui demande 1 sommet) se débloque automatiquement.
-
-### Palettes LED et mélodies par tier
-
-Chaque montagne a sa propre palette de 10 couleurs pour les LEDs NeoPixel. Les couleurs sont de plus en plus spectaculaires :
-- **Tier 1** : dégradés simples (bleu-vert, violet-or)
-- **Tier 2** : couleurs froides et élégantes (glace, violet foncé)
-- **Tier 3** : couleurs chaudes et intenses (orange, arctique)
-- **Tier 4** : effets spéciaux (arc-en-ciel, feu)
-
-Les mélodies suivent la même progression : de 3 notes simples (tier 1) à une fanfare de 8 notes (tier 4).
 
 ### Mode test rapide (`FAST_TEST_MODE`)
 
@@ -594,9 +545,9 @@ Apple bloque l'API Web Bluetooth sur Safari et tous les navigateurs iOS. L'app n
 
 1. **Connexion** — Écran d'accueil avec le logo Peak Progress, bouton « Scan & Connect » pour chercher l'Arduino en Bluetooth, et bouton « Try Demo Mode » pour tester sans Arduino
 
-2. **Dashboard** — Vue principale : montagne actuelle, barre de progression, nombre de sessions, streak, servo position. Se met à jour en temps réel quand on touche le pad
+2. **Dashboard** — Vue principale : montagne actuelle, barre de progression, nombre de sessions, streak. Se met à jour en temps réel quand on enregistre une activité
 
-3. **Montagnes** — Liste des 9 montagnes avec leur statut (verrouillée, débloquée, en cours, complétée). Affiche le tier, le nombre de sessions requises et la palette de couleurs
+3. **Montagnes** — Liste des 9 montagnes avec leur statut (verrouillée, débloquée, en cours, complétée). Affiche le tier et le nombre de sessions requises
 
 4. **Historique** — Résumé de l'activité : total de sessions, sommets atteints, meilleur streak, progression globale
 
@@ -604,7 +555,7 @@ Apple bloque l'API Web Bluetooth sur Safari et tous les navigateurs iOS. L'app n
 
 ### Mode démo
 
-Le mode démo simule un Arduino virtuel pour tester l'interface sans matériel. Les données sont fictives mais le comportement est identique : on peut « toucher » le pad virtuel, voir le grimpeur monter, et atteindre des sommets.
+Le mode démo simule un Arduino virtuel pour tester l'interface sans matériel. Les données sont fictives mais le comportement est identique : on peut enregistrer des activités, voir la progression, et atteindre des sommets.
 
 ---
 
@@ -613,31 +564,41 @@ Le mode démo simule un Arduino virtuel pour tester l'interface sans matériel. 
 ### Schéma du flux de données
 
 ```
-┌──────────────────┐       "T\n"        ┌──────────────────────────────────┐
-│                  │ ──────────────────► │                                  │
-│  CIRCUIT         │                     │          ARDUINO                 │
-│  PLAYGROUND      │ ◄────────────────── │       Uno WiFi Rev.2             │
-│                  │  "L3:00FF99\n"      │                                  │
-│  Capteur tactile │  "M2\n"            │  1. Reçoit le "T"                │
-│  10 LEDs         │  "S4\n"            │  2. logActivity()                │
-│  Buzzer          │                     │  3. Incrémente sessions          │
-│                  │                     │  4. Bouge le servo               │
-└──────────────────┘                     │  5. Sauvegarde EEPROM            │
-                                         │  6. Envoie LEDs + mélodie au CP  │
-                                         │  7. Met à jour BLE               │
-                                         │                                  │
-                                         └───────────┬──────────────────────┘
-                                                     │ BLE (Bluetooth)
-                                                     │ 8 octets de données
-                                                     ▼
-                                         ┌──────────────────────────────────┐
-                                         │          WEB APP                 │
-                                         │                                  │
-                                         │  Lit les données BLE             │
-                                         │  Affiche le dashboard            │
-                                         │  Peut envoyer des commandes      │
-                                         │  (log activité, reset)           │
-                                         └──────────────────────────────────┘
+┌──────────────────────────────────┐
+│          WEB APP                 │
+│  (téléphone ou PC)               │
+│                                  │
+│  Bouton "Log Activity"           │
+│         │                        │
+│         ▼                        │
+│  Envoie CMD_LOG_ACTIVITY (0x01)  │
+│  via BLE characteristic          │
+└──────────┬───────────────────────┘
+           │ BLE (Bluetooth)
+           ▼
+┌──────────────────────────────────┐
+│          ARDUINO                 │
+│       Uno WiFi Rev.2             │
+│                                  │
+│  1. Reçoit la commande BLE      │
+│  2. logActivity()                │
+│  3. Incrémente sessions + streak │
+│  4. Calcule le nouvel angle      │
+│  5. Bouge le servo (grimpeur)    │
+│  6. Sauvegarde en EEPROM         │
+│  7. Vérifie le sommet            │
+│  8. Met à jour les données BLE   │
+│         │                        │
+└─────────┼────────────────────────┘
+          │ BLE notify
+          ▼
+┌──────────────────────────────────┐
+│          WEB APP                 │
+│                                  │
+│  Reçoit la notification BLE     │
+│  Met à jour le dashboard         │
+│  (sessions, streak, montagne)    │
+└──────────────────────────────────┘
 ```
 
 ### Glossaire
@@ -647,21 +608,16 @@ Le mode démo simule un Arduino virtuel pour tester l'interface sans matériel. 
 | `Arduino` | Micro-contrôleur, le cerveau du système. Gère la logique, la mémoire et le Bluetooth |
 | `BLE` | Bluetooth Low Energy — communication sans fil économe en énergie entre l'Arduino et le téléphone |
 | `Bitfield` | Un nombre où chaque bit (0 ou 1) représente un état oui/non. Ici, chaque bit = une montagne débloquée ou non |
-| `Baud rate` | Vitesse de communication série, en bits par seconde. Notre projet utilise 9600 baud |
-| `Capacitif` | Type de capteur qui détecte le contact de la peau grâce aux propriétés électriques du corps humain |
-| `Characteristic` | En BLE, une « boîte à lettres » numérique dans laquelle l'Arduino publie des données que le téléphone peut lire |
-| `Circuit Playground` | Carte Adafruit avec capteurs, LEDs et buzzer intégrés. Sert d'interface utilisateur (entrée tactile + sortie visuelle/sonore) |
-| `Debounce` | Anti-rebond : délai minimum entre deux détections pour éviter les faux positifs |
+| `Characteristic` | En BLE, une « boîte à lettres » numérique dans laquelle on publie ou lit des données |
+| `constrain()` | Fonction Arduino qui empêche une valeur de sortir d'un intervalle [min, max] |
 | `EEPROM` | Mémoire permanente de l'Arduino (1 Ko). Les données survivent aux redémarrages |
-| `Header (`.h`)` | Fichier de code réutilisable qu'on inclut avec `#include`. Contient des définitions et des fonctions |
-| `LED NeoPixel` | LED RGB programmable individuellement. Le Circuit Playground en a 10 en cercle |
+| `Header (`.h`)` | Fichier de code réutilisable qu'on inclut avec `#include` |
 | `loop()` | Fonction Arduino qui s'exécute en boucle infinie après `setup()` |
-| `Parsing` | Action de décoder un message texte pour en extraire les données utiles |
-| `Servo` | Moteur qui tourne à un angle précis (0°-180°). Ici, il fait monter/descendre le grimpeur |
-| `Serial` | Communication filaire entre deux cartes via câble TX/RX |
+| `Notify` | En BLE, mécanisme qui prévient le téléphone automatiquement quand une donnée change |
+| `Servo` | Moteur qui tourne à un angle précis (0°-180°). Fait monter/descendre le grimpeur |
 | `setup()` | Fonction Arduino qui s'exécute une seule fois au démarrage |
 | `Streak` | Série de jours consécutifs où l'utilisateur a été actif |
 | `struct` | Regroupement de variables dans une seule structure (comme un formulaire) |
 | `Tier` | Niveau de difficulté d'une montagne (1 à 4). Plus le tier est élevé, plus il faut de sessions |
-| `UUID` | Identifiant unique universel. En BLE, chaque service et chaque `characteristic` a son propre UUID |
+| `UUID` | Identifiant unique universel. En BLE, chaque service et chaque `characteristic` a le sien |
 | `Web Bluetooth` | API du navigateur qui permet à une page web de se connecter en Bluetooth sans installer d'app |
