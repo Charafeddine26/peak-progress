@@ -22,7 +22,7 @@ void setBLE() {
 // ─── BLE Update ──────────────────────────────────────────────
 void updateBLE() {
   uint8_t data[8] = {
-    p.mtn, p.sessions, SESSIONS_PER,
+    p.mtn, p.sessions, SESSIONS_FOR(p.mtn),
     p.summits, p.streak, p.bestStreak,
     (uint8_t)(p.total >> 8), (uint8_t)(p.total & 0xFF)
   };

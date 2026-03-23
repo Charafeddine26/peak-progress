@@ -3,6 +3,8 @@
 #include "Config.h"
 #include "Memory.h"
 
+int calibratedFloorAngle() { return cal.floorAngle; }
+int calibratedTopAngle() { return cal.topAngle; }
 
 // ─── Buzzer ─────────────────────────────────────────────────
 void playNote(int frequency, int duration) {
@@ -21,8 +23,8 @@ void playNote(int frequency, int duration) {
 }
 
 void playConnect() {
-  int notes[] = {600, 1000,};
-  for (int i = 0; i < 3; i++) {
+  int notes[] = {600, 1000};
+  for (uint8_t i = 0; i < (sizeof(notes) / sizeof(notes[0])); i++) {
     playNote(notes[i], 150);
     delay(40);
   }
@@ -42,7 +44,7 @@ void playSummit(){
   delay(40);
   playNote(1200,180);
   delay(40);
-  for (int i = 0; i < 4; i++) {
+  for (uint8_t i = 0; i < (sizeof(notes) / sizeof(notes[0])); i++) {
     playNote(notes[i], 100);
     delay(40);
   }
@@ -59,8 +61,8 @@ void servoPulse(int deg) {
   digitalWrite(SERVO_PIN, LOW);
 }
 
-void moveServo(int target) {
-  target = constrain(target, SERVO_MIN, SERVO_MAX);
+void moveServoWithin(int target, int minAngle, int maxAngle) {
+  target = constrain(target, minAngle, maxAngle);
   pinMode(SERVO_PIN, OUTPUT);
   int step = (target > angle) ? 1 : -1;
   while (angle != target) {
@@ -76,12 +78,23 @@ void moveServo(int target) {
   digitalWrite(SERVO_PIN, LOW);
 }
 
+void moveServo(int target) {
+  moveServoWithin(target, calibratedFloorAngle(), calibratedTopAngle());
+}
+
+void moveServoRaw(int target) {
+  moveServoWithin(target, SERVO_HARD_MIN, SERVO_HARD_MAX);
+}
+
 int targetAngle() {
-  return SERVO_MIN + ((long)p.sessions * (SERVO_MAX - SERVO_MIN)) / SESSIONS_PER;
+  uint8_t total = SESSIONS_FOR(p.mtn);
+  return calibratedFloorAngle() +
+         ((long)p.sessions * (calibratedTopAngle() - calibratedFloorAngle())) / total;
 }
 
 void logActivity() {
-  if (p.sessions >= SESSIONS_PER) return;
+  uint8_t total = SESSIONS_FOR(p.mtn);
+  if (p.sessions >= total) return;
   playLog();
   
   p.sessions++;
@@ -91,24 +104,24 @@ void logActivity() {
 
   moveServo(targetAngle());
   save();
+  updateBLE();  // Send completed state (e.g. 7/7) to app immediately
 
-  if (p.sessions >= SESSIONS_PER) {
-    delay(3000);
+  if (p.sessions >= total) {
+    delay(3000);  // Let app show the summit state
     p.summits++;
     p.mtn = nextMtn();
     p.sessions = 0;
     save();
     playSummit();
-    moveServo(SERVO_MIN);
+    moveServo(calibratedFloorAngle());
+    updateBLE();  // Send new mountain state (0/next) to app
   }
-
-  updateBLE();
 }
 
 void resetProgress() {
   p = {0, 0, 0, 0, 0, 0};
   save();
-  moveServo(SERVO_MIN);
+  moveServo(calibratedFloorAngle());
   updateBLE();
 }
 
