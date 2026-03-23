@@ -79,7 +79,9 @@ void moveServoWithin(int target, int minAngle, int maxAngle) {
 }
 
 void moveServo(int target) {
-  moveServoWithin(target, calibratedFloorAngle(), calibratedTopAngle());
+  int lo = min(calibratedFloorAngle(), calibratedTopAngle());
+  int hi = max(calibratedFloorAngle(), calibratedTopAngle());
+  moveServoWithin(target, lo, hi);
 }
 
 void moveServoRaw(int target) {

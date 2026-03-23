@@ -45,7 +45,7 @@ void printHelp() {
 }
 
 bool saveCurrentAsFloor() {
-  if (angle >= cal.topAngle - SERVO_CALIB_MIN_SPAN) {
+  if (abs((int)angle - (int)cal.topAngle) < SERVO_CALIB_MIN_SPAN) {
     Serial.println(F("Floor too close to top."));
     return false;
   }
@@ -58,7 +58,7 @@ bool saveCurrentAsFloor() {
 }
 
 bool saveCurrentAsTop() {
-  if (angle <= cal.floorAngle + SERVO_CALIB_MIN_SPAN) {
+  if (abs((int)angle - (int)cal.floorAngle) < SERVO_CALIB_MIN_SPAN) {
     Serial.println(F("Top too close to floor."));
     return false;
   }

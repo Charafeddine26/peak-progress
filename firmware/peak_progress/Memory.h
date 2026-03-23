@@ -4,11 +4,11 @@
 #include "Config.h"
 
 bool calibrationIsValid(const Calibration &value) {
+  int span = abs((int)value.topAngle - (int)value.floorAngle);
   return value.magic == CALIB_MAGIC &&
-         value.floorAngle >= SERVO_HARD_MIN &&
+         value.floorAngle <= SERVO_HARD_MAX &&
          value.topAngle <= SERVO_HARD_MAX &&
-         value.floorAngle < value.topAngle &&
-         (value.topAngle - value.floorAngle) >= SERVO_CALIB_MIN_SPAN;
+         span >= SERVO_CALIB_MIN_SPAN;
 }
 
 void saveCalibration() { EEPROM.put(EEPROM_CALIB_ADDR, cal); }
