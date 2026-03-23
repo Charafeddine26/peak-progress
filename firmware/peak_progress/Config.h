@@ -24,7 +24,6 @@ BLEByteCharacteristic commandChar(CHAR_COMMAND_UUID, BLEWrite);
 #define SERVO_HARD_MAX         180
 #define SERVO_CALIB_MIN_SPAN   10
 #define STEP_DELAY             15
-#define START_IN_HOMING_MODE   1
 int angle = SERVO_DEFAULT_MIN;
 
 // ─── Buzzer ─────────────────────────
