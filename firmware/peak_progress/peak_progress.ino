@@ -46,8 +46,8 @@ void printCalibrationHelp() {
   Serial.println(F("  0     : move to saved floor"));
   Serial.println(F("  9     : move to saved top"));
   Serial.println(F("  f     : save current angle as floor"));
-  Serial.println(F("  t     : save current angle as top"));
-  Serial.println(F("  H     : set current position as home and reset progress"));
+  Serial.println(F("  t     : set current position as home and reset progress"));
+  Serial.println(F("  H     : save current angle as top"));
   Serial.println(F("  d     : reset saved floor/top to defaults"));
   Serial.println(F("  r     : reset progress and go to floor"));
   Serial.println(F("  p     : print current status"));
@@ -126,14 +126,14 @@ void handleSerialCommand(char c) {
   } else if (c == 'f') {
     saveCurrentAsFloor();
   } else if (c == 't') {
-    saveCurrentAsTop();
-  } else if (c == 'H') {
     homeHereAndReset();
+  } else if (c == 'H') {
+    saveCurrentAsTop();
   } else if (c == 'd') {
     resetCalibrationToDefaults();
   } else if (c == 'r') {
     if (!homed) {
-      Serial.println(F("Reset blocked: home first with H."));
+      Serial.println(F("Reset blocked: home first with t."));
     } else {
       resetProgress();
       printStatus();
@@ -154,7 +154,7 @@ void setup() {
     homed = false;
     angle = cal.floorAngle;
     Serial.println(F("Manual homing mode active. No startup movement."));
-    Serial.println(F("Pick an estimate with b/m/u, nudge to the floor, then send H."));
+    Serial.println(F("Pick an estimate with b/m/u, nudge to the floor, then send t."));
   } else {
     homed = true;
     angle = constrain(targetAngle(), SERVO_HARD_MIN, SERVO_HARD_MAX);
