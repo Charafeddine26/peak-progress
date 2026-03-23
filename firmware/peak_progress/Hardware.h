@@ -90,8 +90,8 @@ void moveServoRaw(int target) {
 
 int targetAngle() {
   uint8_t total = SESSIONS_FOR(p.mtn);
-  return calibratedFloorAngle() +
-         ((long)p.sessions * (calibratedTopAngle() - calibratedFloorAngle())) / total;
+  return calibratedTopAngle() +
+         ((long)p.sessions * (calibratedFloorAngle() - calibratedTopAngle())) / total;
 }
 
 void logActivity() {
@@ -115,7 +115,7 @@ void logActivity() {
     p.sessions = 0;
     save();
     playSummit();
-    moveServo(calibratedFloorAngle());
+    moveServo(calibratedTopAngle());
     updateBLE();  // Send new mountain state (0/next) to app
   }
 }
@@ -123,7 +123,7 @@ void logActivity() {
 void resetProgress() {
   p = {0, 0, 0, 0, 0, 0};
   save();
-  moveServo(calibratedFloorAngle());
+  moveServo(calibratedTopAngle());
   updateBLE();
 }
 
